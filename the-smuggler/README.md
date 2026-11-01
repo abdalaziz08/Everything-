@@ -15,7 +15,7 @@
 
 ## النشر الحالي: Render
 
-اللعبة شغّالة على **https://the-smuggler.onrender.com** (خطة مجانية، منطقة Frankfurt).
+اللعبة شغّالة على **https://abdalaziz4.onrender.com** (خطة مجانية، منطقة Frankfurt).
 
 | الإعداد | القيمة |
 |---|---|
@@ -68,5 +68,5 @@
 ```
 node tests/run-tests.mjs                                   # اللعبة والسيرفر (~20 ثانية)
 SMUGGLER_SECRET=<السر> node tests/e2e.mjs [trophy.png]     # متصفح حقيقي، بوت بيلعب بالوقت الحقيقي (~2 دقيقة)
-BASE_URL=https://the-smuggler.onrender.com node tests/e2e.mjs [trophy.png]   # نفس الاختبار على الموقع المنشور
+BASE_URL=https://abdalaziz4.onrender.com node tests/e2e.mjs [trophy.png]   # نفس الاختبار على الموقع المنشور
 ```
