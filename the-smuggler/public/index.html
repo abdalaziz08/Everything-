@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>THE SMUGGLER</title>
+<style>
+  html,body{margin:0;height:100%;background:#050409;overflow:hidden;
+    font-family:"Courier New",ui-monospace,monospace;color:#e9d9b0;user-select:none;-webkit-user-select:none;}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  canvas{display:block;box-shadow:0 0 0 2px #2a1a22,0 0 40px rgba(180,20,40,.25);touch-action:none;}
+  #win{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:18px;
+    background:rgba(5,4,9,.97);z-index:5;padding:16px;box-sizing:border-box;}
+  #win.on{display:flex;}
+  #win h1{margin:0;font-size:clamp(26px,6vw,44px);letter-spacing:8px;color:#f3d27a;text-shadow:0 0 16px rgba(255,170,60,.5);text-align:center;}
+  #win p{margin:0;color:#b5645a;letter-spacing:3px;font-size:14px;text-align:center;}
+  #win img{max-width:min(90vw,720px);max-height:55vh;border:2px solid #7a5a22;}
+  #win img:not([src]){display:none;}
+  .btn{display:inline-block;padding:14px 34px;background:#f3d27a;color:#1a0a06;font-weight:bold;letter-spacing:4px;
+    text-decoration:none;border:2px solid #5a3b0c;box-shadow:0 4px 0 #5a3b0c;font-size:18px;font-family:inherit;cursor:pointer;}
+  .btn:hover{background:#ffe39a;}
+  .btn:active{transform:translateY(3px);box-shadow:0 1px 0 #5a3b0c;}
+  .btn[hidden]{display:none;}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div id="win">
+  <h1>VICTORY</h1>
+  <p id="msg">THE SMUGGLER HAS FALLEN. YOUR TROPHY AWAITS.</p>
+  <img id="trophy" alt="trophy">
+  <a id="dl" class="btn" href="#" download="smuggler_trophy.png" hidden>DOWNLOAD IT NOW</a>
+  <button id="retry" class="btn" hidden>SEND AGAIN</button>
+  <button id="again" class="btn" hidden>PLAY AGAIN</button>
+</div>
+<script type="module" src="game.js"></script>
+</body>
+</html>

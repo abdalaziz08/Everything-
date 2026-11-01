@@ -1,0 +1,6 @@
+node_modules/
+.vercel/
+.env*
+# never commit the plain trophy or the secret
+*.png
+*secret*
