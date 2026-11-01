@@ -1,345 +1,145 @@
-// THE SMUGGLER: browser side. Draws the game, reads input, records every frame of input,
-// and sends the recording to the server, which re-plays it and hands over the trophy only for a real win.
-import { createSim, fingerprint, encodeReplay, inputOk, W, H, LIVES, PHASES, Q, MAX_MOVE, MAX_FOCUS, MAX_FRAMES } from "./sim.js";
+// THE SMUGGLER — "The Border", browser side.
+// Shows each traveler, sends your SEARCH/PASS to the server, and reveals right/wrong so you can
+// learn the hidden rule. The rule is never sent here — the page literally does not know who the
+// smuggler is. Reach the streak before the slip-ups run out and the server hands over the trophy.
 
-const STEP = 1000 / 60, TAU = Math.PI * 2;
-const cv = document.getElementById("c"), ctx = cv.getContext("2d");
-let R = 1;
-function fit() {
-  const s = Math.min(innerWidth / W, innerHeight / H), dpr = window.devicePixelRatio || 1;
-  R = s * dpr; cv.width = Math.round(W * R); cv.height = Math.round(H * R);
-  cv.style.width = Math.round(W * s) + "px"; cv.style.height = Math.round(H * s) + "px";
+const COL = { crimson: "#d7334b", teal: "#2bb3a3", gold: "#e3b23c", violet: "#8b5cf6" };
+const SKIN = "#d9a66b", DARK = "#1c1322";
+const $ = id => document.getElementById(id);
+
+let st = { token: null, at: 0, goal: 8, maxStrikes: 5, busy: false, over: false };
+
+// ---------- drawing a traveler ----------
+function hat(kind) {
+  if (kind === "cap") return `<path d="M64 52 Q90 26 116 52 Z" fill="${DARK}"/><rect x="88" y="50" width="34" height="7" rx="3" fill="${DARK}"/>`;
+  if (kind === "tophat") return `<rect x="72" y="18" width="36" height="34" rx="3" fill="${DARK}"/><rect x="60" y="50" width="60" height="8" rx="4" fill="${DARK}"/>`;
+  return `<path d="M62 56 Q90 10 118 56 Q90 46 62 56 Z" fill="${DARK}"/>`; // hood
 }
-addEventListener("resize", fit); fit();
-
-// ---------- state ----------
-let mode = "title";      // title | connecting | play | sending | done
-let S = null;            // the running game (from sim.js)
-let run = null;          // { token, rec, n, body }
-let session = null, sessionP = null, netMsg = "";
-let paused = false, tick = 0, shake = 0, dialog = null, parts = [];
-
-// ---------- input ----------
-const keys = Object.create(null);
-addEventListener("keydown", e => {
-  keys[e.code] = true;
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
-  if (e.code === "Enter" || e.code === "Space") press();
-  if (e.code === "KeyP" && S && S.state === "fight" && mode === "play") paused = !paused;
-});
-addEventListener("keyup", e => { keys[e.code] = false; });
-addEventListener("blur", () => { for (const k in keys) keys[k] = false; if (S && S.state === "fight") paused = true; });
-document.addEventListener("visibilitychange", () => { if (document.hidden && S && S.state === "fight") paused = true; });
-
-let touch = null;
-function tpos(t) { const r = cv.getBoundingClientRect(); return { x: (t.clientX - r.left) / r.width * W, y: (t.clientY - r.top) / r.height * H }; }
-cv.addEventListener("touchstart", e => {
-  e.preventDefault(); const p = tpos(e.changedTouches[0]);
-  touch = { x: p.x, y: p.y, px: S ? S.player.x : W / 2, py: S ? S.player.y : H - 80 }; press();
-}, { passive: false });
-cv.addEventListener("touchmove", e => {
-  e.preventDefault(); if (!touch) return; const p = tpos(e.changedTouches[0]);
-  touch.tx = touch.px + (p.x - touch.x) * 1.2; touch.ty = touch.py + (p.y - touch.y) * 1.2;
-}, { passive: false });
-cv.addEventListener("touchend", e => { e.preventDefault(); touch = null; }, { passive: false });
-cv.addEventListener("mousedown", () => press());
-
-// One frame of input, as whole 1/16 px steps (exactly what gets recorded and sent).
-function readInput() {
-  const p = S.player, focus = !!(keys.ShiftLeft || keys.ShiftRight), sp = focus ? 1.7 : 4.0;
-  let dx = (keys.ArrowRight || keys.KeyD ? 1 : 0) - (keys.ArrowLeft || keys.KeyA ? 1 : 0);
-  let dy = (keys.ArrowDown || keys.KeyS ? 1 : 0) - (keys.ArrowUp || keys.KeyW ? 1 : 0);
-  if (dx && dy) { dx *= Math.SQRT1_2; dy *= Math.SQRT1_2; }
-  let vx = dx * sp, vy = dy * sp;
-  if (touch && touch.tx !== undefined) {
-    const ddx = touch.tx - (p.x + vx), ddy = touch.ty - (p.y + vy), d = Math.hypot(ddx, ddy);
-    if (d > 0.5) { const m = Math.min(d, 4.0); vx += ddx / d * m; vy += ddy / d * m; }
-  }
-  let qx = Math.round(vx * Q), qy = Math.round(vy * Q);
-  const max = focus ? MAX_FOCUS : MAX_MOVE, len = Math.hypot(qx, qy);
-  if (len > max) { qx = Math.trunc(qx * max / len); qy = Math.trunc(qy * max / len); }
-  while (!inputOk(qx, qy, focus)) { qx -= Math.sign(qx); qy -= Math.sign(qy); }
-  return [qx, qy, focus ? 1 : 0];
+function crate(kind) {
+  if (kind === "none") return `<circle cx="66" cy="150" r="6" fill="${SKIN}"/><circle cx="114" cy="150" r="6" fill="${SKIN}"/>`;
+  if (kind === "sack") return `<path d="M74 150 Q72 186 90 186 Q108 186 106 150 Q98 142 90 142 Q82 142 74 150 Z" fill="#b98a55" stroke="#2a1a10" stroke-width="2"/><path d="M80 150 Q90 144 100 150" fill="none" stroke="#2a1a10" stroke-width="2"/>`;
+  if (kind === "box") return `<rect x="70" y="150" width="40" height="36" rx="3" fill="#c08a4a" stroke="#2a1a10" stroke-width="2"/><path d="M90 150 V186 M70 168 H110" stroke="#e8c892" stroke-width="3"/>`;
+  return `<rect x="70" y="148" width="40" height="40" rx="7" fill="#9a6b3a" stroke="#2a1a10" stroke-width="2"/><path d="M70 160 H110 M70 176 H110" stroke="#2a1a10" stroke-width="2"/>`; // barrel
 }
-
-// ---------- server ----------
-// The randomness for the fight is NOT in this page. We fetch it from the server one window at a
-// time, and the server only unlocks the next window once our replay-so-far proves we survived the
-// earlier frames in real time. So nobody (human or script) can compute a winning run offline.
-const LOWWATER = 20;          // refill the seed buffer when within this many frames of the end
-let seedHex = [];             // seedHex[f-1] = randomness for frame f
-let fetching = false, syncing = false;
-
-function b64(bytes) { let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s); }
-function unb64(str) { const s = atob(str); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
-
-function fetchSession() {
-  sessionP = fetch("/api/start", { method: "POST" })
-    .then(r => r.json())
-    .then(j => { if (!j.token) throw new Error(j.error || "no ticket"); session = { token: j.token, at: Date.now() }; return session; })
-    .finally(() => { sessionP = null; });
-  return sessionP;
+function badgeGlyph(kind) {
+  const s = `fill="none" stroke="#120a06" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"`;
+  const g = { // drawn in a 0..18 box, translated onto the chest
+    anchor: `<circle cx="9" cy="2.5" r="2.3" ${s}/><path d="M9 4.8 V16 M3 11 Q3 16 9 16 Q15 16 15 11 M5 8 H13" ${s}/>`,
+    feather: `<path d="M15 3 Q6 5 4 15 M15 3 Q13 10 7 12 M15 3 Q14 7 10 8.5 M4 15 L7 12" ${s}/>`,
+    key: `<circle cx="5" cy="6" r="3.2" ${s}/><path d="M7.3 8.3 L15 16 M12 13 L14 11 M13.5 14.5 L15.5 12.5" ${s}/>`,
+    skull: `<path d="M4 7 Q4 1 9 1 Q14 1 14 7 Q14 10 12 11 L12 14 Q12 16 9 16 Q6 16 6 14 L6 11 Q4 10 4 7 Z" ${s}/><circle cx="7" cy="7" r="1.4" fill="#120a06"/><circle cx="11" cy="7" r="1.4" fill="#120a06"/>`,
+  };
+  return `<g transform="translate(99,96)">${g[kind] || ""}</g>`;
 }
-fetchSession().catch(() => {});
-
-async function pumpSeeds() {
-  if (fetching || !run || mode !== "play") return;
-  if (seedHex.length > run.n + LOWWATER) return;
-  fetching = true;
-  try {
-    const replay = run.n ? b64(encodeReplay(run.rec, run.n)) : "";
-    const r = await fetch("/api/rng", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: run.token, replay, have: run.n }) });
-    const j = await r.json();
-    if (!j.seeds) { netMsg = String(j.error || "lost the border").toUpperCase(); return; }
-    const bytes = unb64(j.seeds);
-    for (let i = 0; i + 16 <= bytes.length; i += 16) {
-      let s = ""; for (let k = 0; k < 16; k++) s += bytes[i + k].toString(16).padStart(2, "0");
-      seedHex[j.from - 1 + i / 16] = s;
-    }
-    netMsg = "";
-  } catch { netMsg = "CONNECTION HICCUP..."; }
-  finally { fetching = false; }
+function stampSeal(stamp) {
+  if (stamp === "none") return `<g transform="translate(59,96)" opacity=".8"><circle cx="9" cy="9" r="9" fill="none" stroke="#6a5a48" stroke-width="2" stroke-dasharray="3 3"/><path d="M4 4 L14 14" stroke="#6a5a48" stroke-width="2"/></g>`;
+  const c = COL[stamp];
+  return `<g transform="translate(59,96)"><circle cx="9" cy="9" r="9" fill="${c}" opacity=".3"/><circle cx="9" cy="9" r="9" fill="none" stroke="${c}" stroke-width="2.4"/><circle cx="9" cy="9" r="3.4" fill="${c}"/></g>`;
+}
+function svgTraveler(t) {
+  const coat = COL[t.coat];
+  return `<svg viewBox="0 0 180 200" width="100%" style="display:block">
+    <ellipse cx="90" cy="192" rx="46" ry="7" fill="#000" opacity=".35"/>
+    <line x1="66" y1="96" x2="66" y2="150" stroke="${coat}" stroke-width="9" stroke-linecap="round"/>
+    <line x1="114" y1="96" x2="114" y2="150" stroke="${coat}" stroke-width="9" stroke-linecap="round"/>
+    <rect x="56" y="82" width="68" height="86" rx="16" fill="${coat}" stroke="#120a06" stroke-width="2"/>
+    <circle cx="90" cy="62" r="22" fill="${SKIN}" stroke="#120a06" stroke-width="2"/>
+    ${hat(t.hat)}
+    ${stampSeal(t.stamp)}
+    ${badgeGlyph(t.badge)}
+    ${crate(t.crate)}
+  </svg>`;
+}
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+function traitList(t) {
+  const sw = c => `<span style="display:inline-block;width:9px;height:9px;border-radius:2px;vertical-align:-1px;background:${COL[c]};margin-right:3px"></span>`;
+  return [
+    `coat <b>${sw(t.coat)}${cap(t.coat)}</b>`,
+    `crate <b>${cap(t.crate)}</b>`,
+    `hat <b>${cap(t.hat)}</b>`,
+    `stamp <b>${t.stamp === "none" ? "None" : sw(t.stamp) + cap(t.stamp)}</b>`,
+    `badge <b>${cap(t.badge)}</b>`,
+  ].join(" · ");
+}
+function renderCard(which, t) {
+  $(which + "Fig").innerHTML = svgTraveler(t);
+  $(which + "Traits").innerHTML = traitList(t);
 }
 
-async function begin(again) {
-  const back = mode;
-  mode = "connecting"; netMsg = "";
-  try {
-    if (session && Date.now() - session.at > 30 * 60 * 1000) session = null;
-    if (!session) await (sessionP || fetchSession());
-  } catch {
-    mode = back; netMsg = "CAN'T REACH THE BORDER. TAP TO RETRY"; return false;
-  }
-  const s = session; session = null;
-  run = { token: s.token, rec: new Uint8Array(3 * 60 * 60 * 3), n: 0, body: null };
-  seedHex = []; syncing = false;
-  parts = []; shake = 0; paused = false;
-  if (touch) { touch.px = W / 2; touch.py = H - 80; touch.tx = undefined; }
-  S = createSim(f => seedHex[f - 1], fx);
-  mode = "play";
-  dialog = again ? { text: "Back for more? Turn around.", t: 120 } : { text: "Nothing crosses my border.", t: 150 };
-  pumpSeeds().catch(() => {});            // first window of randomness
-  fetchSession().catch(() => {});         // ticket for the next attempt
-  return true;
+// ---------- meters ----------
+function pips(el, n, on, cls) {
+  let h = "";
+  for (let i = 0; i < n; i++) h += `<div class="pip${i < on ? " on" : ""}"></div>`;
+  el.innerHTML = h;
+}
+function meters(streak, strikes) {
+  $("goalTxt").textContent = `${streak}/${st.goal}`;
+  pips($("streakPips"), st.goal, streak);
+  pips($("strikePips"), st.maxStrikes, strikes);
 }
 
-function press() {
-  if (mode === "title") begin(false);
-  else if (mode === "play" && S.state === "gameover" && S.stateT > 40) begin(true);
+// ---------- flow ----------
+function setButtons(on) { $("searchBtn").disabled = !on; $("passBtn").disabled = !on; }
+function overlay(title, msg, { png, again } = {}) {
+  $("ovTitle").textContent = title; $("ovMsg").textContent = msg;
+  const img = $("trophy"), dl = $("dl");
+  if (png) { const url = URL.createObjectURL(new Blob([Uint8Array.from(atob(png), c => c.charCodeAt(0))], { type: "image/png" })); img.src = url; dl.href = url; dl.hidden = false; }
+  else { img.removeAttribute("src"); dl.hidden = true; }
+  $("again").hidden = !again;
+  $("overlay").classList.add("on");
 }
 
-function record(qx, qy, f) {
-  if (3 * (run.n + 1) > run.rec.length) { const r = new Uint8Array(run.rec.length * 2); r.set(run.rec); run.rec = r; }
-  run.rec[3 * run.n] = qx & 255; run.rec[3 * run.n + 1] = qy & 255; run.rec[3 * run.n + 2] = f; run.n++;
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  return r.json();
 }
 
-const win = document.getElementById("win"), $ = id => document.getElementById(id);
-function overlay(title, msg, show = []) {
-  win.querySelector("h1").textContent = title; $("msg").textContent = msg;
-  for (const id of ["dl", "retry", "again"]) $(id).hidden = !show.includes(id);
-  win.classList.add("on");
-}
-$("retry").onclick = () => send();
-$("again").onclick = async () => {
-  win.classList.remove("on"); $("trophy").removeAttribute("src");
-  if (!(await begin(true))) overlay("CONNECTION LOST", "CAN'T REACH THE BORDER.", ["again"]);
-};
-
-function submit() {
-  mode = "sending";
-  run.body = JSON.stringify({ token: run.token, replay: b64(encodeReplay(run.rec, run.n)), fp: fingerprint(S) });
-  send();
-}
-async function send() {
-  overlay("VERIFYING", "THE BORDER GUARDS ARE CHECKING YOUR RUN...");
+async function start() {
+  $("overlay").classList.remove("on");
+  st.over = false; st.busy = true; setButtons(false); $("net").textContent = ""; $("verdict").textContent = "";
   let j;
-  try {
-    const r = await fetch("/api/verify", { method: "POST", headers: { "content-type": "application/json" }, body: run.body });
-    j = await r.json();
-  } catch {
-    overlay("CONNECTION LOST", "YOUR RUN IS SAFE. SEND IT AGAIN.", ["retry", "again"]); return;
-  }
-  mode = "done";
-  if (!j.ok) { overlay("REJECTED", String(j.error || "the border said no").toUpperCase(), ["again"]); return; }
-  const url = URL.createObjectURL(new Blob([unb64(j.png)], { type: "image/png" }));
-  $("trophy").src = url; $("dl").href = url;
-  overlay("VICTORY", "THE SMUGGLER HAS FALLEN. YOUR TROPHY AWAITS.", ["dl"]);
+  try { j = await post("/api/start", {}); } catch { $("net").textContent = "CAN'T REACH THE BORDER — TAP A BUTTON TO RETRY"; st.busy = false; return; }
+  if (!j.token) { $("net").textContent = (j.error || "server error").toUpperCase(); st.busy = false; return; }
+  st.token = j.token; st.at = j.at; st.goal = j.goal; st.maxStrikes = j.maxStrikes;
+  renderCard("prev", j.prev); renderCard("cur", j.cur); meters(0, 0);
+  st.busy = false; setButtons(true);
 }
 
-// ---------- visuals hooked into the game ----------
-function burst(x, y, col, n, spd) {
-  for (let i = 0; i < n; i++) {
-    const a = Math.random() * TAU, s = Math.random() * spd;
-    parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 30 + Math.random() * 30, col });
+async function decide(decision) {
+  if (st.busy || st.over) return;
+  st.busy = true; setButtons(false); $("net").textContent = "";
+  let j;
+  try { j = await post("/api/step", { token: st.token, at: st.at, decision }); }
+  catch { $("net").textContent = "CONNECTION HICCUP — TAP AGAIN"; st.busy = false; setButtons(true); return; }
+  if (j.error) {
+    if (/sync|closed|over/.test(j.error)) { overlay("BOOTH CLOSED", j.error.toUpperCase(), { again: true }); st.over = true; }
+    else $("net").textContent = j.error.toUpperCase();
+    st.busy = false; return;
   }
-}
-const fx = {
-  cleared(eb) { for (const b of eb) parts.push({ x: b.x, y: b.y, vx: 0, vy: -1, life: 24, col: "#f3d27a" }); },
-  hit(x, y) { shake = 18; burst(x, y, "#5ef2ff", 40, 5); },
-  spark(x, y) { if (Math.random() < 0.3) parts.push({ x, y, vx: (Math.random() - 0.5) * 3, vy: -Math.random() * 2, life: 14, col: "#fff" }); },
-  phaseDown(x, y, ph) { burst(x, y, PHASES[ph].col, 60, 7); shake = 14; },
-  crate(x, y) { burst(x, y, "#ffe14d", 10, 3); },
-  dying(x, y, t) { burst(x + (Math.random() - 0.5) * 80, y + (Math.random() - 0.5) * 80, ["#ff4d7a", "#f3d27a", "#c23bff"][t % 3], 18, 6); shake = 8; },
-  dialog(text, t) { dialog = { text, t }; },
-};
 
-// ---------- update ----------
-function update() {
-  tick++;
-  if (shake > 0) shake--;
-  for (const q of parts) { q.x += q.vx; q.y += q.vy; q.vx *= 0.96; q.vy *= 0.96; q.life--; }
-  parts = parts.filter(q => q.life > 0);
-  if (dialog && --dialog.t <= 0) dialog = null;
-  if (mode !== "play") return;
-  if (S.state === "gameover") { S.step(0, 0, false); return; }
-  if (paused && S.state === "fight") return;
-  if (run.n >= MAX_FRAMES) { mode = "done"; overlay("TOO SLOW", "THE BORDER CLOSED. 30 MINUTES IS THE LIMIT.", ["again"]); return; }
-  if (seedHex.length < S.frame + 1) { syncing = true; pumpSeeds().catch(() => {}); return; } // wait for the server's randomness
-  syncing = false;
-  if (seedHex.length <= run.n + LOWWATER) pumpSeeds().catch(() => {});
-  const [qx, qy, f] = readInput();
-  record(qx, qy, f);
-  S.step(qx, qy, f === 1);
-  if (S.state === "won") { dialog = null; submit(); }
+  meters(j.streak, j.strikes);
+  const wasSmug = j.actual;
+  const verdict = $("verdict");
+  verdict.innerHTML = j.correct
+    ? `<span class="ok">✓ ${decision === "search" ? "CONTRABAND! Good catch." : "Clean. Waved through."}</span>`
+    : `<span class="bad">✗ ${wasSmug ? "SMUGGLER SLIPPED THROUGH." : "You searched an innocent."}</span>`;
+
+  await new Promise(r => setTimeout(r, j.done ? 500 : 820));
+
+  if (j.won) { st.over = true; overlay("VICTORY", "THE SMUGGLER HAS FALLEN. YOUR TROPHY AWAITS.", { png: j.png, again: true }); return; }
+  if (j.done) { st.over = true; overlay("SHIFT OVER", "TOO MANY SLIP-UPS. THE SMUGGLER GOT THROUGH.", { again: true }); return; }
+
+  st.at = j.at; renderCard("prev", j.prev); renderCard("cur", j.cur);
+  st.busy = false; setButtons(true);
 }
 
-// ---------- render ----------
-const stars = Array.from({ length: 90 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: Math.random() * 1.6 + 0.3, v: Math.random() * 1.2 + 0.3 }));
-function txt(s, x, y, size, col, align, glow) {
-  ctx.font = "bold " + size + "px 'Courier New',monospace"; ctx.textAlign = align || "center";
-  ctx.fillStyle = col; if (glow) { ctx.shadowColor = col; ctx.shadowBlur = glow; } ctx.fillText(s, x, y); ctx.shadowBlur = 0;
-}
+$("searchBtn").onclick = () => decide("search");
+$("passBtn").onclick = () => decide("pass");
+$("again").onclick = () => start();
+addEventListener("keydown", e => {
+  if (st.over && (e.code === "Enter" || e.code === "Space")) { start(); return; }
+  if (e.code === "ArrowLeft" || e.code === "KeyS") decide("search");
+  if (e.code === "ArrowRight" || e.code === "KeyP") decide("pass");
+});
 
-function drawBoss(x, y, p, flash) {
-  const pulse = Math.sin(tick / 10);
-  ctx.save(); ctx.translate(x, y);
-  const g = ctx.createRadialGradient(0, 0, 10, 0, 0, 80 + pulse * 6);
-  g.addColorStop(0, "rgba(255,40,70,.35)"); g.addColorStop(1, "rgba(255,40,70,0)");
-  if (p === 2) g.addColorStop(0, "rgba(194,59,255,.45)");
-  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 86, 0, TAU); ctx.fill();
-  ctx.fillStyle = "#3a060a";
-  ctx.beginPath(); ctx.moveTo(-22, -26); ctx.quadraticCurveTo(-44, -50, -36, -74); ctx.quadraticCurveTo(-28, -50, -8, -34); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(22, -26); ctx.quadraticCurveTo(44, -50, 36, -74); ctx.quadraticCurveTo(28, -50, 8, -34); ctx.fill();
-  const fg = ctx.createRadialGradient(-10, -12, 4, 0, 0, 40);
-  fg.addColorStop(0, "#d42a3c"); fg.addColorStop(1, "#5a0812");
-  ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(0, 0, 36, 0, TAU); ctx.fill();
-  if (flash) { ctx.fillStyle = "rgba(255,235,235,.28)"; ctx.beginPath(); ctx.arc(0, 0, 36, 0, TAU); ctx.fill(); }
-  ctx.strokeStyle = "#1a0306"; ctx.lineWidth = 3; ctx.stroke();
-  const eye = p === 2 ? "#ff3bf2" : "#ffd23d";
-  ctx.fillStyle = "#1a0306";
-  ctx.beginPath(); ctx.moveTo(-26, -14); ctx.lineTo(-6, -6); ctx.lineTo(-8, -1); ctx.lineTo(-26, -8); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(26, -14); ctx.lineTo(6, -6); ctx.lineTo(8, -1); ctx.lineTo(26, -8); ctx.fill();
-  ctx.fillStyle = eye; ctx.shadowColor = eye; ctx.shadowBlur = 12;
-  ctx.beginPath(); ctx.ellipse(-15, 0, 6, 4, 0.3, 0, TAU); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(15, 0, 6, 4, -0.3, 0, TAU); ctx.fill(); ctx.shadowBlur = 0;
-  ctx.fillStyle = "#1a0306"; ctx.beginPath(); ctx.moveTo(-20, 14); ctx.quadraticCurveTo(0, 32, 20, 14); ctx.quadraticCurveTo(0, 22, -20, 14); ctx.fill();
-  ctx.fillStyle = "#f3e6c8";
-  for (const fx of [-12, 8]) { ctx.beginPath(); ctx.moveTo(fx, 17); ctx.lineTo(fx + 4, 26); ctx.lineTo(fx + 8, 18); ctx.fill(); }
-  ctx.restore();
-}
-
-function render() {
-  ctx.setTransform(R, 0, 0, R, 0, 0);
-  if (shake > 0) ctx.translate((Math.random() - 0.5) * shake * 0.6, (Math.random() - 0.5) * shake * 0.6);
-  ctx.fillStyle = "#07060b"; ctx.fillRect(-20, -20, W + 40, H + 40);
-  ctx.strokeStyle = "rgba(255,60,90,.05)"; ctx.lineWidth = 1; const off = (tick * 0.6) % 32;
-  for (let y = -32 + off; y < H; y += 32) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-  for (let x = 0; x < W; x += 32) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-  for (const s of stars) { s.y += s.v; if (s.y > H) s.y = 0; ctx.fillStyle = "rgba(233,217,176," + (0.25 + s.s * 0.25) + ")"; ctx.fillRect(s.x, s.y, s.s, s.s); }
-
-  if (!S || mode === "title" || (mode === "connecting" && !S)) { drawTitle(); return; }
-
-  const { player, boss, eb, pb, lasers } = S, st = S.state;
-  for (const L of lasers) {
-    if (L.t <= L.warn) {
-      ctx.strokeStyle = "rgba(255,60,90," + (0.25 + 0.35 * Math.abs(Math.sin(L.t / 4))) + ")"; ctx.lineWidth = 1.5;
-      ctx.setLineDash([6, 6]); ctx.beginPath(); ctx.moveTo(L.x, boss.y); ctx.lineTo(L.x, H); ctx.stroke(); ctx.setLineDash([]);
-    } else {
-      const k = 1 - (L.t - L.warn) / L.on; ctx.fillStyle = "rgba(194,59,255," + (0.35 + 0.4 * k) + ")";
-      ctx.shadowColor = "#c23bff"; ctx.shadowBlur = 20; ctx.fillRect(L.x - L.w / 2, boss.y, L.w, H);
-      ctx.fillStyle = "rgba(255,255,255," + (0.6 * k + 0.2) + ")"; ctx.fillRect(L.x - L.w / 6, boss.y, L.w / 3, H); ctx.shadowBlur = 0;
-    }
-  }
-
-  if (!(st === "won" || (st === "dying" && S.stateT > 140))) drawBoss(boss.x, boss.y, boss.phase, boss.flash);
-
-  ctx.fillStyle = "#9ff7ff"; for (const b of pb) ctx.fillRect(b.x - 1.5, b.y - 6, 3, 10);
-
-  if (player.alive && !(player.inv > 0 && Math.floor(tick / 4) % 2)) {
-    const focus = keys.ShiftLeft || keys.ShiftRight;
-    ctx.save(); ctx.translate(player.x, player.y);
-    ctx.fillStyle = "#1fb6c9"; ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(10, 10); ctx.lineTo(0, 5); ctx.lineTo(-10, 10); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = "#9ff7ff"; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.fillStyle = "#fff"; ctx.shadowColor = focus ? "#fff" : "#5ef2ff"; ctx.shadowBlur = focus ? 14 : 6;
-    ctx.beginPath(); ctx.arc(0, 0, focus ? 3.4 : 2.6, 0, TAU); ctx.fill(); ctx.shadowBlur = 0;
-    if (focus) { ctx.strokeStyle = "rgba(255,255,255,.4)"; ctx.beginPath(); ctx.arc(0, 0, 9 + Math.sin(tick / 6), 0, TAU); ctx.stroke(); }
-    ctx.restore();
-  }
-
-  for (const b of eb) {
-    if (b.ghost) { const d = Math.hypot(b.x - player.x, b.y - player.y); ctx.globalAlpha = d > 120 ? 0.1 : 0.1 + 0.9 * (1 - d / 120); }
-    ctx.fillStyle = b.col; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
-    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.5, 0, TAU); ctx.fill();
-    if (b.crate) { ctx.strokeStyle = "#1a0306"; ctx.lineWidth = 2; ctx.strokeRect(b.x - 5, b.y - 5, 10, 10); }
-    ctx.globalAlpha = 1;
-  }
-  drawParts();
-
-  // HUD
-  ctx.setTransform(R, 0, 0, R, 0, 0);
-  txt("THE SMUGGLER", 14, 24, 15, "#f3d27a", "left");
-  if (st !== "won") {
-    const ph = PHASES[boss.phase]; txt(ph.name, W - 14, 24, 12, ph.col, "right");
-    const bw = W - 28; ctx.fillStyle = "#1a0f12"; ctx.fillRect(14, 32, bw, 8);
-    for (let i = 0; i < 3; i++) {
-      const seg = bw / 3, x0 = 14 + i * seg;
-      let f = i < boss.phase ? 0 : i > boss.phase ? 1 : Math.max(0, boss.hp) / PHASES[i].hp;
-      if (st === "dying") f = 0; ctx.fillStyle = PHASES[i].col; ctx.fillRect(x0 + 1, 33, (seg - 2) * f, 6);
-    }
-  }
-  for (let i = 0; i < LIVES; i++) { ctx.fillStyle = i < S.lives ? "#ff4d7a" : "#3a1a22"; drawHeart(18 + i * 20, H - 18); }
-  if (st === "phase" && S.stateT < 110) txt(PHASES[boss.phase].name, W / 2, H / 2, 24, PHASES[boss.phase].col, "center", 14);
-  if (dialog) {
-    ctx.fillStyle = "rgba(5,4,9,.75)"; ctx.fillRect(30, H - 118, W - 60, 40); ctx.strokeStyle = "#7a5a22"; ctx.strokeRect(30, H - 118, W - 60, 40);
-    txt("“" + dialog.text + "”", W / 2, H - 92, 14, "#f3d27a");
-  }
-  if (paused && st === "fight") {
-    ctx.fillStyle = "rgba(5,4,9,.7)"; ctx.fillRect(0, 0, W, H); txt("PAUSED", W / 2, H / 2, 30, "#f3d27a", "center", 12);
-    txt("press P", W / 2, H / 2 + 30, 13, "#b5645a");
-  }
-  if (st === "gameover") {
-    ctx.fillStyle = "rgba(5,4,9,.78)"; ctx.fillRect(0, 0, W, H);
-    txt("GAME OVER", W / 2, H / 2 - 20, 38, "#ff4d7a", "center", 16);
-    txt("The Smuggler slips away.", W / 2, H / 2 + 16, 14, "#e9d9b0");
-    if (mode === "connecting") txt("CONTACTING THE BORDER...", W / 2, H / 2 + 60, 14, "#5ef2ff");
-    else if (netMsg) txt(netMsg, W / 2, H / 2 + 60, 13, "#ff4d7a");
-    else if (S.stateT > 40 && Math.floor(tick / 30) % 2) txt("PRESS ENTER / TAP TO RETRY", W / 2, H / 2 + 60, 14, "#5ef2ff");
-  }
-  if (syncing && st !== "gameover" && Math.floor(tick / 20) % 2) txt("SYNCING...", W / 2, H - 150, 12, "#5ef2ff");
-  if (netMsg && st !== "gameover") txt(netMsg, W / 2, H - 134, 11, "#ff9be6");
-}
-
-function drawTitle() {
-  txt("THE SMUGGLER", W / 2, 210, 42, "#f3d27a", "center", 18);
-  txt("— a boss you were not meant to beat —", W / 2, 245, 13, "#b5645a");
-  drawBoss(W / 2, 330 + Math.sin(tick / 30) * 4, 0, 0);
-  const rows = [["ARROWS / WASD", "move"], ["SHIFT", "focus (slow + precise)"], ["P", "pause"]];
-  rows.forEach(([k, v], i) => { txt(k, 215, 430 + i * 22, 14, "#f3d27a", "right"); txt(v, 235, 430 + i * 22, 14, "#e9d9b0", "left"); });
-  txt("touch: drag to move · fire is automatic", W / 2, 500, 12, "#7d6a48");
-  txt(LIVES + " LIVES. NO CONTINUES.", W / 2, 540, 14, "#ff4d7a");
-  if (mode === "connecting") txt("CONTACTING THE BORDER...", W / 2, 585, 16, "#5ef2ff", "center", 10);
-  else if (netMsg) txt(netMsg, W / 2, 585, 14, "#ff4d7a");
-  else if (Math.floor(tick / 30) % 2) txt("PRESS ENTER / TAP TO START", W / 2, 585, 16, "#5ef2ff", "center", 10);
-  drawParts();
-}
-function drawParts() { for (const q of parts) { ctx.globalAlpha = Math.min(1, q.life / 30); ctx.fillStyle = q.col; ctx.fillRect(q.x - 1.5, q.y - 1.5, 3, 3); } ctx.globalAlpha = 1; }
-function drawHeart(x, y) { ctx.beginPath(); ctx.moveTo(x, y + 5); ctx.bezierCurveTo(x - 9, y - 2, x - 5, y - 9, x, y - 4); ctx.bezierCurveTo(x + 5, y - 9, x + 9, y - 2, x, y + 5); ctx.fill(); }
-
-// ---------- loop: fixed 60 steps per second ----------
-let acc = 0, last = performance.now();
-function frame(now) {
-  acc += Math.min(250, now - last); last = now;
-  while (acc >= STEP) { update(); acc -= STEP; }
-  render(); requestAnimationFrame(frame);
-}
-requestAnimationFrame(frame);
+start();
