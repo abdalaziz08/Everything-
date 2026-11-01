@@ -1,5 +1,6 @@
 // End-to-end test in a real browser (Playwright + Chromium), in real time (~2-3 minutes).
-//   SMUGGLER_SECRET=... node tests/e2e.mjs [expected_trophy.png]
+//   SMUGGLER_SECRET=... node tests/e2e.mjs [expected_trophy.png]      (starts a local server)
+//   BASE_URL=https://your-site node tests/e2e.mjs [expected_trophy.png] (tests a deployed site)
 // 1. a bot plays the real page by pressing keys, wins, and the trophy from the server is shown
 // 2. a cheating page (boss HP edited to 6 in the browser) "wins" fast and the server rejects it
 // The bot is injected by the test only; nothing like it ships in public/.
@@ -13,13 +14,16 @@ import { dirname, join } from "node:path";
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const PORT = 3911, BASE = `http://localhost:${PORT}`;
+const PORT = 3911, BASE = (process.env.BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, "");
 let failed = 0;
 const check = (name, ok, extra = "") => { console.log((ok ? "PASS " : "FAIL ") + name + (extra ? "  (" + extra + ")" : "")); if (!ok) failed++; };
 
-if (!process.env.SMUGGLER_SECRET) { console.error("set SMUGGLER_SECRET"); process.exit(1); }
-const server = spawn("node", [join(ROOT, "server/node.js")], { env: { ...process.env, PORT: String(PORT) }, stdio: ["ignore", "pipe", "inherit"] });
-await new Promise(res => server.stdout.once("data", res));
+let server = null;
+if (!process.env.BASE_URL) {
+  if (!process.env.SMUGGLER_SECRET) { console.error("set SMUGGLER_SECRET (local) or BASE_URL (deployed site)"); process.exit(1); }
+  server = spawn("node", [join(ROOT, "server/node.js")], { env: { ...process.env, PORT: String(PORT) }, stdio: ["ignore", "pipe", "inherit"] });
+  await new Promise(res => server.stdout.once("data", res));
+}
 
 const botSrc = (await readFile(join(ROOT, "tests/bot.mjs"), "utf8")).replace("../public/sim.js", "/sim.js");
 const HOOK = `
@@ -101,6 +105,6 @@ for (const p of ["/server/trophy.js", "/server/app.js", "/../server/trophy.js", 
 }
 
 await browser.close();
-server.kill();
+if (server) server.kill();
 console.log(failed ? `\n${failed} FAILED` : "\nALL PASSED");
 process.exit(failed ? 1 : 0);

@@ -13,7 +13,20 @@
 
 الشي الوحيد اللي ما بينمنع 100% هو بوت بيلعب فعلاً وبيفوز. وهاد لعب، مش سحب للملف.
 
-## النشر المجاني على Vercel
+## النشر الحالي: Render
+
+اللعبة شغّالة على **https://the-smuggler.onrender.com** (خطة مجانية، منطقة Frankfurt).
+
+| الإعداد | القيمة |
+|---|---|
+| Branch | `claude/the-smuggler-challenge-shpl2j` (أي push عليه بيعمل deploy تلقائي) |
+| Build Command | `cd the-smuggler && npm install` |
+| Start Command | `node the-smuggler/server/node.js` |
+| Environment | `SMUGGLER_SECRET` (السر)، و`NODE_VERSION=22` |
+
+> الخطة المجانية بتنام بعد 15 دقيقة بدون زوار، وأول فتحة بعدها بتاخذ حوالي دقيقة. التذاكر ما بتتأثر بإعادة التشغيل.
+
+## بديل: النشر المجاني على Vercel
 
 1. ادخل على https://vercel.com وسجّل دخول بحساب GitHub.
 2. اضغط **Add New → Project**، واختار الريبو `Everything-` واضغط **Import**.
@@ -55,4 +68,5 @@
 ```
 node tests/run-tests.mjs                                   # اللعبة والسيرفر (~20 ثانية)
 SMUGGLER_SECRET=<السر> node tests/e2e.mjs [trophy.png]     # متصفح حقيقي، بوت بيلعب بالوقت الحقيقي (~2 دقيقة)
+BASE_URL=https://the-smuggler.onrender.com node tests/e2e.mjs [trophy.png]   # نفس الاختبار على الموقع المنشور
 ```
