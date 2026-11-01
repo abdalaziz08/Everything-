@@ -2,109 +2,37 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>THE SMUGGLER</title>
 <style>
-  :root{
-    --bg:#0a0710; --panel:#140d1c; --ink:#e9d9b0; --dim:#9a8a78; --gold:#f3d27a; --crimson:#ff4d6a;
-    --teal:#2bb3a3; --line:#2a1a2e;
-  }
-  *{box-sizing:border-box}
-  html,body{margin:0;min-height:100%;background:
-    radial-gradient(130% 90% at 50% -10%, #241331 0%, #0a0710 55%, #070510 100%);
-    color:var(--ink);font-family:"Courier New",ui-monospace,monospace;-webkit-text-size-adjust:100%;}
-  body{display:flex;flex-direction:column;align-items:center;padding:14px 14px 28px;gap:14px;min-height:100dvh;}
-  .wrap{width:100%;max-width:520px;display:flex;flex-direction:column;gap:14px;}
-  header{text-align:center;}
-  h1{margin:0;font-size:clamp(20px,5.5vw,30px);letter-spacing:5px;color:var(--gold);text-shadow:0 0 18px rgba(243,210,122,.3)}
-  .sub{margin:4px 0 0;color:var(--crimson);letter-spacing:3px;font-size:11px}
-  .bars{display:flex;gap:10px;align-items:center;justify-content:space-between;background:var(--panel);
-    border:1px solid var(--line);border-radius:12px;padding:10px 12px}
-  .streak{flex:1}
-  .label{font-size:10px;letter-spacing:2px;color:var(--dim);margin-bottom:5px}
-  .pips{display:flex;gap:4px;flex-wrap:wrap}
-  .pip{width:14px;height:14px;border-radius:3px;background:#20152a;border:1px solid #33223c}
-  .pip.on{background:var(--teal);border-color:var(--teal);box-shadow:0 0 8px rgba(43,179,163,.6)}
-  .strikes .pip.on{background:var(--crimson);border-color:var(--crimson);box-shadow:0 0 8px rgba(255,77,106,.6)}
-  .lineup{display:flex;gap:12px;align-items:flex-end;justify-content:center}
-  .card{background:linear-gradient(180deg,#160f20,#0f0a16);border:1px solid var(--line);border-radius:16px;
-    padding:12px 10px 10px;display:flex;flex-direction:column;align-items:center;gap:8px;position:relative}
-  .card.cur{flex:1;max-width:320px;box-shadow:0 0 0 1px #3a2742, 0 14px 40px rgba(0,0,0,.5)}
-  .card.prev{width:120px;opacity:.78}
-  .card .tag{font-size:9px;letter-spacing:2px;color:var(--dim)}
-  .card.cur .tag{color:var(--gold)}
-  .fig{width:100%;}
-  .traits{display:flex;flex-wrap:wrap;gap:4px 6px;justify-content:center;font-size:10px;letter-spacing:1px;color:var(--dim)}
-  .traits b{color:var(--ink);font-weight:bold}
-  .verdict{min-height:40px;display:flex;align-items:center;justify-content:center;text-align:center;
-    font-size:14px;letter-spacing:1px;transition:opacity .15s}
-  .verdict .ok{color:var(--teal)} .verdict .bad{color:var(--crimson)}
-  .controls{display:flex;gap:12px}
-  .btn{flex:1;padding:16px 10px;border:none;border-radius:14px;font-family:inherit;font-weight:bold;font-size:16px;
-    letter-spacing:3px;cursor:pointer;transition:transform .05s, filter .15s;color:#120a06}
-  .btn:active{transform:translateY(2px)}
-  .btn[disabled]{filter:grayscale(.6) brightness(.7);cursor:default}
-  .search{background:var(--crimson);box-shadow:0 4px 0 #8a2338}
-  .search:active{box-shadow:0 1px 0 #8a2338}
-  .pass{background:var(--gold);box-shadow:0 4px 0 #5a3b0c}
-  .pass:active{box-shadow:0 1px 0 #5a3b0c}
-  .hint{text-align:center;color:var(--dim);font-size:11px;letter-spacing:1px;line-height:1.5}
-  .hint b{color:var(--ink)}
-  #overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;
-    background:rgba(7,5,14,.97);z-index:5;padding:20px;text-align:center}
-  #overlay.on{display:flex}
-  #overlay h2{margin:0;font-size:clamp(24px,7vw,40px);letter-spacing:6px;color:var(--gold);text-shadow:0 0 16px rgba(255,170,60,.5)}
-  #overlay p{margin:0;color:var(--crimson);letter-spacing:2px;font-size:13px;max-width:360px}
-  #overlay img{max-width:min(90vw,660px);max-height:50vh;border:2px solid #7a5a22;border-radius:6px}
-  #overlay img:not([src]){display:none}
-  .act{display:inline-block;padding:13px 30px;background:var(--gold);color:#1a0a06;font-weight:bold;letter-spacing:3px;
-    text-decoration:none;border:2px solid #5a3b0c;border-radius:6px;box-shadow:0 4px 0 #5a3b0c;font-size:16px;cursor:pointer;font-family:inherit}
-  .act:active{transform:translateY(3px);box-shadow:0 1px 0 #5a3b0c}
-  .act[hidden]{display:none}
-  .net{text-align:center;color:var(--crimson);font-size:11px;letter-spacing:1px;min-height:14px}
+  html,body{margin:0;height:100%;background:#050409;overflow:hidden;
+    font-family:"Courier New",ui-monospace,monospace;color:#e9d9b0;user-select:none;-webkit-user-select:none;}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  canvas{display:block;box-shadow:0 0 0 2px #2a1a22,0 0 40px rgba(180,20,40,.25);touch-action:none;}
+  #win{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:18px;
+    background:rgba(5,4,9,.97);z-index:5;padding:16px;box-sizing:border-box;}
+  #win.on{display:flex;}
+  #win h1{margin:0;font-size:clamp(26px,6vw,44px);letter-spacing:8px;color:#f3d27a;text-shadow:0 0 16px rgba(255,170,60,.5);text-align:center;}
+  #win p{margin:0;color:#b5645a;letter-spacing:3px;font-size:14px;text-align:center;}
+  #win img{max-width:min(90vw,720px);max-height:55vh;border:2px solid #7a5a22;}
+  #win img:not([src]){display:none;}
+  .btn{display:inline-block;padding:14px 34px;background:#f3d27a;color:#1a0a06;font-weight:bold;letter-spacing:4px;
+    text-decoration:none;border:2px solid #5a3b0c;box-shadow:0 4px 0 #5a3b0c;font-size:18px;font-family:inherit;cursor:pointer;}
+  .btn:hover{background:#ffe39a;}
+  .btn:active{transform:translateY(3px);box-shadow:0 1px 0 #5a3b0c;}
+  .btn[hidden]{display:none;}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>THE SMUGGLER</h1>
-    <p class="sub">BORDER CONTROL · FIND THE SMUGGLER</p>
-  </header>
-
-  <div class="bars">
-    <div class="streak">
-      <div class="label">INSPECTION STREAK — <span id="goalTxt">0/8</span></div>
-      <div class="pips" id="streakPips"></div>
-    </div>
-    <div class="strikes">
-      <div class="label">SLIP-UPS</div>
-      <div class="pips" id="strikePips"></div>
-    </div>
-  </div>
-
-  <div class="lineup">
-    <div class="card prev"><div class="tag">PREVIOUS</div><div class="fig" id="prevFig"></div><div class="traits" id="prevTraits"></div></div>
-    <div class="card cur"><div class="tag">AT THE GATE</div><div class="fig" id="curFig"></div><div class="traits" id="curTraits"></div></div>
-  </div>
-
-  <div class="verdict" id="verdict"></div>
-
-  <div class="controls">
-    <button class="btn search" id="searchBtn">SEARCH</button>
-    <button class="btn pass" id="passBtn">PASS</button>
-  </div>
-  <div class="hint">A hidden rule decides who's smuggling. Learn it from <b>SEARCH</b>/<b>PASS</b> feedback.<br>Get <b>8 right in a row</b> before <b>5 slip-ups</b>. Watch the previous traveler too.</div>
-  <div class="net" id="net"></div>
-</div>
-
-<div id="overlay">
-  <h2 id="ovTitle">VICTORY</h2>
-  <p id="ovMsg"></p>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div id="win">
+  <h1>VICTORY</h1>
+  <p id="msg">THE SMUGGLER HAS FALLEN. YOUR TROPHY AWAITS.</p>
   <img id="trophy" alt="trophy">
-  <a id="dl" class="act" download="smuggler_trophy.png" hidden>DOWNLOAD IT NOW</a>
-  <button id="again" class="act" hidden>NEW SHIFT</button>
+  <a id="dl" class="btn" href="#" download="smuggler_trophy.png" hidden>DOWNLOAD IT NOW</a>
+  <button id="retry" class="btn" hidden>SEND AGAIN</button>
+  <button id="again" class="btn" hidden>PLAY AGAIN</button>
 </div>
-
-<script type="module" src="game.js"></script>
+<script type="module" src="boss.js"></script>
 </body>
 </html>

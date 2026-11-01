@@ -94,22 +94,34 @@ async function post(path, body) {
   return r.json();
 }
 
+function toBoss() { location.href = "index.html"; }
+
 async function start() {
   $("overlay").classList.remove("on");
   st.over = false; st.busy = true; setButtons(false); $("net").textContent = ""; $("verdict").textContent = "";
+  let pass = null;
+  try { pass = sessionStorage.getItem("smuggler_pass"); } catch {}
+  if (!pass) { lock("LOCKED", "BEAT THE SMUGGLER'S BOSS FIRST TO REACH THE BORDER."); return; }
   let j;
-  try { j = await post("/api/start", {}); } catch { $("net").textContent = "CAN'T REACH THE BORDER — TAP A BUTTON TO RETRY"; st.busy = false; return; }
-  if (!j.token) { $("net").textContent = (j.error || "server error").toUpperCase(); st.busy = false; return; }
+  try { j = await post("/api/s2/start", { pass }); } catch { $("net").textContent = "CAN'T REACH THE BORDER — RELOAD"; st.busy = false; return; }
+  if (!j.token) { lock("LOCKED", (j.error || "beat the boss first").toUpperCase()); return; }
+  // The pass is single-use: it is spent now. A new attempt means beating the boss again.
+  try { sessionStorage.removeItem("smuggler_pass"); } catch {}
   st.token = j.token; st.at = j.at; st.goal = j.goal; st.maxStrikes = j.maxStrikes;
   renderCard("prev", j.prev); renderCard("cur", j.cur); meters(0, 0);
   st.busy = false; setButtons(true);
 }
+function lock(title, msg) {
+  st.over = true; st.busy = false; setButtons(false);
+  $("again").textContent = "TO THE BOSS";
+  overlay(title, msg, { again: true });
+}
 
 async function decide(decision) {
   if (st.busy || st.over) return;
-  st.busy = true; setButtons(false); $("net").textContent = "";
+  st.busy = true; setButtons(false); $("net").textContent = ""; $("verdict").innerHTML = "";
   let j;
-  try { j = await post("/api/step", { token: st.token, at: st.at, decision }); }
+  try { j = await post("/api/s2/step", { token: st.token, at: st.at, decision }); }
   catch { $("net").textContent = "CONNECTION HICCUP — TAP AGAIN"; st.busy = false; setButtons(true); return; }
   if (j.error) {
     if (/sync|closed|over/.test(j.error)) { overlay("BOOTH CLOSED", j.error.toUpperCase(), { again: true }); st.over = true; }
@@ -126,18 +138,20 @@ async function decide(decision) {
 
   await new Promise(r => setTimeout(r, j.done ? 500 : 820));
 
-  if (j.won) { st.over = true; overlay("VICTORY", "THE SMUGGLER HAS FALLEN. YOUR TROPHY AWAITS.", { png: j.png, again: true }); return; }
-  if (j.done) { st.over = true; overlay("SHIFT OVER", "TOO MANY SLIP-UPS. THE SMUGGLER GOT THROUGH.", { again: true }); return; }
+  if (j.won) { st.over = true; $("again").textContent = "PLAY AGAIN"; overlay("VICTORY", "THE SMUGGLER HAS FALLEN. YOUR TROPHY AWAITS.", { png: j.png, again: true }); return; }
+  if (j.done) { st.over = true; $("again").textContent = "BACK TO THE BOSS"; overlay("SHIFT OVER", "TOO MANY SLIP-UPS. BEAT THE BOSS AGAIN FOR ANOTHER PASS.", { again: true }); return; }
 
   st.at = j.at; renderCard("prev", j.prev); renderCard("cur", j.cur);
   st.busy = false; setButtons(true);
 }
 
+// A stage-2 attempt is spent once started, so every retry goes back through the boss.
 $("searchBtn").onclick = () => decide("search");
 $("passBtn").onclick = () => decide("pass");
-$("again").onclick = () => start();
+$("again").onclick = () => toBoss();
 addEventListener("keydown", e => {
-  if (st.over && (e.code === "Enter" || e.code === "Space")) { start(); return; }
+  if (st.over && (e.code === "Enter" || e.code === "Space")) { toBoss(); return; }
+  if (st.over) return;
   if (e.code === "ArrowLeft" || e.code === "KeyS") decide("search");
   if (e.code === "ArrowRight" || e.code === "KeyP") decide("pass");
 });
