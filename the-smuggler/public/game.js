@@ -63,14 +63,43 @@ function readInput() {
 }
 
 // ---------- server ----------
+// The randomness for the fight is NOT in this page. We fetch it from the server one window at a
+// time, and the server only unlocks the next window once our replay-so-far proves we survived the
+// earlier frames in real time. So nobody (human or script) can compute a winning run offline.
+const LOWWATER = 20;          // refill the seed buffer when within this many frames of the end
+let seedHex = [];             // seedHex[f-1] = randomness for frame f
+let fetching = false, syncing = false;
+
+function b64(bytes) { let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s); }
+function unb64(str) { const s = atob(str); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+
 function fetchSession() {
   sessionP = fetch("/api/start", { method: "POST" })
     .then(r => r.json())
-    .then(j => { if (!j.token) throw new Error(j.error || "no ticket"); session = { token: j.token, seed: j.seed, at: Date.now() }; return session; })
+    .then(j => { if (!j.token) throw new Error(j.error || "no ticket"); session = { token: j.token, at: Date.now() }; return session; })
     .finally(() => { sessionP = null; });
   return sessionP;
 }
 fetchSession().catch(() => {});
+
+async function pumpSeeds() {
+  if (fetching || !run || mode !== "play") return;
+  if (seedHex.length > run.n + LOWWATER) return;
+  fetching = true;
+  try {
+    const replay = run.n ? b64(encodeReplay(run.rec, run.n)) : "";
+    const r = await fetch("/api/rng", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: run.token, replay, have: run.n }) });
+    const j = await r.json();
+    if (!j.seeds) { netMsg = String(j.error || "lost the border").toUpperCase(); return; }
+    const bytes = unb64(j.seeds);
+    for (let i = 0; i + 16 <= bytes.length; i += 16) {
+      let s = ""; for (let k = 0; k < 16; k++) s += bytes[i + k].toString(16).padStart(2, "0");
+      seedHex[j.from - 1 + i / 16] = s;
+    }
+    netMsg = "";
+  } catch { netMsg = "CONNECTION HICCUP..."; }
+  finally { fetching = false; }
+}
 
 async function begin(again) {
   const back = mode;
@@ -83,12 +112,14 @@ async function begin(again) {
   }
   const s = session; session = null;
   run = { token: s.token, rec: new Uint8Array(3 * 60 * 60 * 3), n: 0, body: null };
+  seedHex = []; syncing = false;
   parts = []; shake = 0; paused = false;
   if (touch) { touch.px = W / 2; touch.py = H - 80; touch.tx = undefined; }
-  S = createSim(s.seed, fx);
+  S = createSim(f => seedHex[f - 1], fx);
   mode = "play";
   dialog = again ? { text: "Back for more? Turn around.", t: 120 } : { text: "Nothing crosses my border.", t: 150 };
-  fetchSession().catch(() => {}); // ticket for the next attempt
+  pumpSeeds().catch(() => {});            // first window of randomness
+  fetchSession().catch(() => {});         // ticket for the next attempt
   return true;
 }
 
@@ -101,9 +132,6 @@ function record(qx, qy, f) {
   if (3 * (run.n + 1) > run.rec.length) { const r = new Uint8Array(run.rec.length * 2); r.set(run.rec); run.rec = r; }
   run.rec[3 * run.n] = qx & 255; run.rec[3 * run.n + 1] = qy & 255; run.rec[3 * run.n + 2] = f; run.n++;
 }
-
-function b64(bytes) { let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s); }
-function unb64(str) { const s = atob(str); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
 
 const win = document.getElementById("win"), $ = id => document.getElementById(id);
 function overlay(title, msg, show = []) {
@@ -166,6 +194,9 @@ function update() {
   if (S.state === "gameover") { S.step(0, 0, false); return; }
   if (paused && S.state === "fight") return;
   if (run.n >= MAX_FRAMES) { mode = "done"; overlay("TOO SLOW", "THE BORDER CLOSED. 30 MINUTES IS THE LIMIT.", ["again"]); return; }
+  if (seedHex.length < S.frame + 1) { syncing = true; pumpSeeds().catch(() => {}); return; } // wait for the server's randomness
+  syncing = false;
+  if (seedHex.length <= run.n + LOWWATER) pumpSeeds().catch(() => {});
   const [qx, qy, f] = readInput();
   record(qx, qy, f);
   S.step(qx, qy, f === 1);
@@ -284,6 +315,8 @@ function render() {
     else if (netMsg) txt(netMsg, W / 2, H / 2 + 60, 13, "#ff4d7a");
     else if (S.stateT > 40 && Math.floor(tick / 30) % 2) txt("PRESS ENTER / TAP TO RETRY", W / 2, H / 2 + 60, 14, "#5ef2ff");
   }
+  if (syncing && st !== "gameover" && Math.floor(tick / 20) % 2) txt("SYNCING...", W / 2, H - 150, 12, "#5ef2ff");
+  if (netMsg && st !== "gameover") txt(netMsg, W / 2, H - 134, 11, "#ff9be6");
 }
 
 function drawTitle() {

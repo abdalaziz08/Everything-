@@ -4,6 +4,12 @@
 // same result on every JS engine. It only uses + - * /, comparisons, Math.sqrt, Math.round,
 // Math.floor, Math.min, Math.max and Math.abs, which every engine computes identically.
 // Math.sin/cos/atan2/hypot/random can differ between browsers, so they are not used here.
+//
+// The randomness for each frame comes from a per-frame seed. The browser does NOT know how to
+// make those seeds; it fetches them from the server one window at a time, and the server only
+// releases a window once the player has proven (by replay) that they survived the earlier frames
+// in real time. So the whole fight's randomness never exists ahead of time: you cannot compute a
+// winning run offline, you have to actually play it out.
 
 export const W = 480, H = 640;
 export const LIVES = 5;
@@ -74,9 +80,10 @@ export function makeRand(seedHex) {
 const SPREAD = [-0.12, 0, 0.12].map(a => ({ vx: dsin(a) * 11, vy: -dcos(a) * 11 }));
 const NOFX = {};
 
+// frameSeedFor(frameIndex) -> 32-hex-char seed for that frame (from the server).
 // fx: optional visual hooks for the browser (particles, shake, dialog). The server passes none.
-export function createSim(seedHex, fx = NOFX) {
-  const rand = makeRand(seedHex);
+export function createSim(frameSeedFor, fx = NOFX) {
+  let rand = () => 0;
   const S = {
     state: "intro", stateT: 0, frame: 0, lives: LIVES,
     player: { x: W / 2, y: H - 80, r: 2.6, inv: 0, fire: 0, alive: true },
@@ -137,6 +144,7 @@ export function createSim(seedHex, fx = NOFX) {
   function step(qx, qy, focus) {
     S.frame++; S.stateT++;
     if (S.state === "gameover" || S.state === "won") return;
+    rand = makeRand(frameSeedFor(S.frame)); // this frame's randomness, from the server
 
     boss.x += (boss.tx - boss.x) * 0.04; boss.y += (boss.ty - boss.y) * 0.04;
     if (boss.flash > 0) boss.flash--;
@@ -261,9 +269,20 @@ export function decodeReplay(bytes) {
   return { qx, qy, fl, n: qx.length };
 }
 
+// Turn a flat byte buffer of 16-byte blocks into frameSeedFor: block i (0-based) is frame i+1.
+export function seedsFromBytes(bytes) {
+  const hex = [];
+  for (let i = 0; i + 16 <= bytes.length; i += 16) {
+    let s = "";
+    for (let j = 0; j < 16; j++) s += bytes[i + j].toString(16).padStart(2, "0");
+    hex.push(s);
+  }
+  return hex; // index with (frame-1)
+}
+
 // Play a recorded run from the start. Used by the server.
-export function runReplay(seedHex, rep) {
-  const S = createSim(seedHex);
+export function runReplay(frameSeedFor, rep) {
+  const S = createSim(frameSeedFor);
   for (let i = 0; i < rep.n; i++) {
     S.step(rep.qx[i], rep.qy[i], rep.fl[i] === 1);
     if (S.state === "won") return { won: true, frames: i + 1, fp: fingerprint(S) };
