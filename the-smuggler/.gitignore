@@ -4,3 +4,6 @@ node_modules/
 # never commit the plain trophy or the secret
 *.png
 *secret*
+
+# author-only (not served, kept out of the public repo)
+tests/
