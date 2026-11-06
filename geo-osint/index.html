@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>GEO OSINT #1 - Where Am I?</title>
+<title>GEO OSINT - Where Am I?</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --txt:#e6edf3; --mute:#8b949e; --acc:#2ea043; --warn:#d29922; --bad:#f85149; }
@@ -57,6 +57,7 @@
   #flag { font-family:ui-monospace,Consolas,monospace; background:#0d1117; border:1px dashed var(--acc); color:#7ee787; padding:10px; border-radius:8px;
           direction:ltr; user-select:all; word-break:break-all; }
 
+  #flags { text-align:left; margin:10px 0 0; line-height:1.9; font-family:ui-monospace,Consolas,monospace; font-size:13px; direction:ltr; }
   #intro p { color:var(--mute); line-height:1.7; margin:6px 0; text-align:left; }
   #intro ul { text-align:left; line-height:1.8; padding-left:20px; margin:8px 0 14px; }
 
@@ -74,7 +75,7 @@
 <body>
 
 <div id="bar">
-  <h1>GEO OSINT #1 <small>- Where am I?</small></h1>
+  <h1>GEO OSINT <small id="stage"></small></h1>
   <span class="sp"></span>
   <span class="chip" id="tries"></span>
   <span class="chip hide-m" id="clock">00:00</span>
@@ -89,9 +90,7 @@
   <div class="mask" id="mask-bl"></div>
 </div>
 
-<div id="hint">
-  <b>Hint:</b> Don't rush to say the capital... the trees around you don't grow just anywhere in this country.
-</div>
+<div id="hint"></div>
 
 <div id="mapbox">
   <div id="map"></div>
@@ -110,30 +109,40 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (() => {
-  // ---- hidden answer (lightly encoded so it isn't sitting in plain text) ----
-  const D = JSON.parse(Array.from(new TextDecoder().decode(Uint8Array.from(atob(
-    "fSJ9dTB5X2RsMHRfc21sNHBfM2h0XzFzMWwxYnRfdDBue0dBTEYiIDoiZ2FsZiIgLDYgOiJyIiAsImVnIiA6ImNjIiAsXSLQuNC80YPRgtCw0LEiICwi4YOY4YOb4YOj4YOX4YOQ4YORIiAsImltdXRhYiJbIDoieXRpYyIgLDY4MzYuMTQgOiJnbmwiICw3ODQ2LjE0IDoidGFsIns="
-  ), c => c.charCodeAt(0)))).reverse().join(""));
+  // Stage 1 in the clear. Each stage's flag and the next stage are encrypted with
+  // a key made from that stage's city name (see tools/build.mjs).
+  const FIRST = /*STAGES*/{"n":1,"of":3,"level":"Easy","lat":41.6487,"lng":41.6386,"h":95,"hint":"Don't rush to say the capital... the trees around you don't grow just anywhere in this country.","cc":"300bfc13949304f7981294084fd5bf6e8d96283998a5f194a4c9f544083e1baa","sec":{"s":"XO40dwSHYL9AScgf3/qMbQ==","i":"hAlb8WnctPDhFj6K","c":"iQuQl2+PGoXPKb69rf1Xx3ONucnp8LKF/CoDZK8P4Ty+0hCo40SjVZYAe3PxReD2p6Ejbzx+vvaLk2kCMhZiG078HzNmscd+eWfrwBfQTK5e9Bcz7kndo35ffIZfWovqQZzJMZBc3z8kMowyPIJtG7zPg2VmWjabSMcAUjkVWgOprjDi1hF1AS7D9Fqodm0JdGsHkqL8Wte54nj51q+0Y4/cAnq22cUbX0K+Ah2vKfkoj2csWCH+tYiV51fsAkAOjH6vADTOt9YcMt40/ROw4qpC5B9c5UEaBtCieW4QrYL3g5WUZYdzH7+VFvBRcA/J6NyCr+duG9IDP2SzSOUXN57mpz5HEbv6YRosezeXG7zNnCq3Ijwrmq4Ndfl0IpshhFt6OtF2qYGPAvSQmBXgp6EqW4Thpj/vSjZnEXyLgzbPEW6vIIqm955Ysp3iPsj3BdzSdwOwWCYxVNJ0js0IgH+g3HRSkD44xDElssC1qWcTtPYbrLw9Xfju68MVGeqM6abIyKd7kPM5eD4sn/P7wgEXoIt3PNjNLf8j/08jHfD3Rn2PY40eFyz7w7KjdotCjch6E/vLfbUFmEtQf2NVmuAmBaiNE5XUJiSos0pHT/UIawfk0aB9dBhcJu8ypzYB9/J9BB/lytEL5NxjCHZ1Q4k2qkPk+1S/ICCeDzwJImnB8CnGxE9XLndqhhGBFOaLe7RLl/m7dNLInR9Pnb2Nlws9sb5+P6TnRhAHaQYSxChUjov7OgsNuUGpPfzCvi1Rv0AQHtMEfPwcnRmJKB+/qyPwvyFEKArr72wXMLDbGb4NkFyFBPjfqtK/IZJlq7kaNeVCE2Nv0WVeeepMQu6uCl/mIBEt3booXoBFqBKmX5uBprz//IaDh6z2YeXdspv3z46PjDkOejv4XdC7ehphQzsmsK6U7GZagmaj4FRWItIV5BpPHrcuN0YtJLAsnfR30ZKw1nu75Y6XuVoZZF35ThXpXKJCRL6aejhbrQ6k/r59fbRvChWscdmU25Eqve047o/013xWWPDjBffGRTPLicaHLydYkqkeyx8vdcOT9BDCPuU2DvbCIsof1ZZQIRQTu4L/yCPtb0uAG7B5vPNBPte3E61bmwCzyuxPt6cViko6OgVzNRwnl6ShRXgGdAQcN6TBFpbC693oVgkkNgEDzZFXa3UReQK/zWpnFjvIdQ/Ib/uM590NZd0/rb5I2CqTi4jwSf40N3PVhMM/b5RVOjmOIyzEpN5uERV78KEXidBOGZrqDTY=","it":150000}}/*END*/;
 
-  const MAX_TRIES = 3, LOCK_MIN = 2, KEY = "geo1";
+  const MAX_TRIES = 3, LOCK_MIN = 2, KEY = "geo-osint-v2";
   const $ = id => document.getElementById(id);
-  const st = JSON.parse(localStorage.getItem(KEY) || "{}");
-  st.used ??= 0; st.start ??= Date.now();
+  let st = JSON.parse(localStorage.getItem(KEY) || "null");
+  if (!st || !st.cur) st = { cur: FIRST, used: 0, start: Date.now(), flags: [] };
   const save = () => localStorage.setItem(KEY, JSON.stringify(st));
   save();
+  const S = () => st.cur;
+
+  // ---- crypto ----
+  const ub64 = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
+  const norm = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  const sha = async s => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s))), x => x.toString(16).padStart(2, "0")).join("");
+  async function unlock(city) {
+    const { s, i, c, it } = S().sec;
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(norm(city)), "PBKDF2", false, ["deriveKey"]);
+    const k = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: ub64(s), iterations: it, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    try { return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: ub64(i) }, k, ub64(c)))); }
+    catch { return null; }
+  }
 
   // ---- street view (keyless embed, player can walk around) ----
-  const svURL = () => `https://maps.google.com/maps?q=&layer=c&cbll=${D.lat},${D.lng}&cbp=11,95,0,0,0&output=svembed&t=${Date.now()}`;
-  $("sv").src = svURL();
+  const svURL = () => `https://maps.google.com/maps?q=&layer=c&cbll=${S().lat},${S().lng}&cbp=11,${S().h},0,0,0&output=svembed&t=${Date.now()}`;
   $("btn-home").onclick = () => { $("sv").src = svURL(); };
   $("btn-hint").onclick = () => { const h = $("hint"); h.style.display = h.style.display === "block" ? "none" : "block"; };
 
   // ---- timer / tries ----
   const fmt = ms => { const s = Math.floor(ms / 1000); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
   const tick = () => { $("clock").textContent = fmt((st.end || Date.now()) - st.start); };
-  setInterval(tick, 1000); tick();
+  setInterval(tick, 1000);
   const showTries = () => { $("tries").textContent = `Attempts: ${Math.max(0, MAX_TRIES - st.used)}/${MAX_TRIES}`; };
-  showTries();
 
   // ---- guess map ----
   const map = L.map("map", { worldCopyJump: true, zoomControl: true }).setView([25, 20], 1);
@@ -144,6 +153,17 @@
     $("guess").disabled = false; $("guess").textContent = "Confirm guess";
   });
   $("grow").onclick = () => { const b = $("mapbox").classList.toggle("big"); $("grow").textContent = b ? "Shrink" : "Expand"; setTimeout(() => map.invalidateSize(), 250); };
+
+  function loadStage() {
+    const s = S();
+    $("stage").textContent = `- Stage ${s.n}/${s.of} (${s.level})`;
+    $("hint").innerHTML = `<b>Hint:</b> ${s.hint}`; $("hint").style.display = "none";
+    $("sv").src = svURL();
+    if (pin) { pin.remove(); pin = null; }
+    map.setView([25, 20], 1);
+    $("guess").disabled = true; $("guess").textContent = "Place a pin on the map";
+    showTries(); tick();
+  }
 
   // ---- helpers ----
   const km = (a, b, c, d) => {
@@ -160,26 +180,36 @@
     try {
       const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10&accept-language=en`);
       const a = (await r.json()).address || {};
-      return { cc: a.country_code || "", city: a.city || a.town || a.village || a.county || "", country: a.country || "" };
+      const names = [a.city, a.town, a.village, a.municipality, a.county].filter(Boolean);
+      return { cc: a.country_code || "", names, country: a.country || "" };
     } catch { return null; }
   }
   const lockedFor = () => st.lockUntil ? Math.max(0, st.lockUntil - Date.now()) : 0;
 
   // ---- guessing ----
+  let busy = false;
   $("guess").onclick = async () => {
-    if (!pin || st.won) return;
+    if (!pin || st.won || busy) return;
     const left = lockedFor();
     if (left) return say(`Out of attempts. Wait ${fmt(left)} and try again.`, "bad");
     if (st.lockUntil) { st.used = 0; st.lockUntil = 0; }
 
+    busy = true;
     const g = pin.getLatLng().wrap();
     $("guess").disabled = true; $("guess").textContent = "Checking...";
-    const dist = km(g.lat, g.lng, D.lat, D.lng);
     const info = await where(g.lat, g.lng);
-    const cityHit = info && D.city.includes(info.city.toLowerCase());
+    let opened = null;
+    for (const n of (info ? info.names : [])) if ((opened = await unlock(n))) break;
+    busy = false;
     $("guess").disabled = false; $("guess").textContent = "Confirm guess";
 
-    if (cityHit || dist <= D.r) return win(g, dist);
+    if (opened) {
+      st.won = { flag: opened.flag, next: opened.next, lat: g.lat, lng: g.lng };
+      st.flags.push({ n: S().n, flag: opened.flag });
+      st.end = Date.now(); save(); tick();
+      return showWin();
+    }
+    if (!info) return say("Couldn't check that spot (map service didn't answer). Try again - this attempt didn't count.", "warn");
 
     st.used++;
     if (st.used >= MAX_TRIES) st.lockUntil = Date.now() + LOCK_MIN * 60000;
@@ -187,28 +217,36 @@
 
     const rest = MAX_TRIES - st.used;
     const tail = rest > 0 ? `<br><small>${rest} attempt${rest > 1 ? "s" : ""} left</small>` : `<br><small>Out of attempts - come back in ${LOCK_MIN} minutes</small>`;
-    if (info && info.cc === D.cc)
-      say(`Right country! But <b>${info.city || "that spot"}</b> is not the city. You need the exact city.${tail}`, "warn");
-    else if (info)
-      say(`Wrong country${info.country ? ` (${info.country})` : ""}. Look closer at the details around you.${tail}`, "bad");
+    if ((await sha("geo-osint:" + info.cc)) === S().cc)
+      say(`Right country! But <b>${info.names[0] || "that spot"}</b> is not the city. You need the exact city.${tail}`, "warn");
     else
-      say(`Wrong.${tail}`, "bad");
+      say(`Wrong country${info.country ? ` (${info.country})` : ""}. Look closer at the details around you.${tail}`, "bad");
   };
 
-  function win(g, dist) {
-    st.won = true; st.end = st.end || Date.now(); save(); tick();
+  function showWin() {
+    const w = st.won, s = S();
+    const dist = km(w.lat, w.lng, s.lat, s.lng);
     const level = dist <= 0.3 ? "Same street!" : dist <= 1.5 ? "Right neighborhood" : "Right city";
+    const last = !w.next;
     $("card").innerHTML = `
-      <h2>You found it!</h2>
+      <h2>${last ? `All ${s.of} stages cleared!` : `Stage ${s.n} cleared!`}</h2>
       <div>${level} - Distance: <b>${dist < 1 ? Math.round(dist * 1000) + " m" : dist.toFixed(2) + " km"}</b> &middot; Time: <b>${fmt(st.end - st.start)}</b></div>
       <div id="rmap"></div>
       <div style="margin-bottom:6px;color:var(--mute)">Flag:</div>
-      <div id="flag">${D.flag}</div>
-      <div style="margin-top:14px"><button onclick="localStorage.removeItem('${KEY}');location.reload()">Play again</button></div>`;
+      <div id="flag">${w.flag}</div>
+      ${last ? `<div id="flags">${st.flags.map(f => `Stage ${f.n}: ${f.flag}`).join("<br>")}</div>` : ""}
+      <div style="margin-top:14px">${last
+        ? `<button id="again">Play again</button>`
+        : `<button class="pri" id="next">Next stage</button>`}</div>`;
     $("modal").style.display = "flex";
+    if (last) $("again").onclick = () => { localStorage.removeItem(KEY); location.reload(); };
+    else $("next").onclick = () => {
+      st.cur = w.next; st.won = null; st.used = 0; st.lockUntil = 0; st.end = 0; st.start = Date.now(); save();
+      $("modal").style.display = "none"; loadStage();
+    };
     const rm = L.map("rmap");
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(rm);
-    const t = [D.lat, D.lng], u = [g.lat, g.lng];
+    const t = [s.lat, s.lng], u = [w.lat, w.lng];
     L.marker(u).addTo(rm).bindTooltip("Your guess");
     L.circleMarker(t, { radius: 9, color: "#2ea043", fillOpacity: .9 }).addTo(rm).bindTooltip("Correct spot", { permanent: true });
     L.polyline([u, t], { color: "#d29922", dashArray: "6 6" }).addTo(rm);
@@ -216,17 +254,19 @@
   }
 
   // ---- intro / resume ----
-  if (st.won) { win({ lat: D.lat, lng: D.lng }, 0); return; }
+  loadStage();
+  if (st.won) { showWin(); return; }
   if (!st.seen) {
     $("card").innerHTML = `<div id="intro">
-      <h2>GEO OSINT #1 - Where am I?</h2>
+      <h2>GEO OSINT - Where am I?</h2>
       <p>You've been dropped somewhere on planet Earth. All you have is your eyes.</p>
       <ul>
         <li>Walk down the street (click the arrows or drag the view) and look around.</li>
         <li>Look for any clue: the language on signs, trees, architecture, cars...</li>
         <li>When you know, open the map below, place a pin, and confirm.</li>
         <li>You must pin at least the right <b>city</b> - the country alone is not enough.</li>
-        <li>You only get ${MAX_TRIES} attempts. There's a hint button at the top if you get stuck.</li>
+        <li>${FIRST.of} stages, each harder than the last. Solve one to unlock the next.</li>
+        <li>You get ${MAX_TRIES} attempts per stage. There's a hint button at the top if you get stuck.</li>
       </ul>
       <button class="pri" id="go">Start</button></div>`;
     $("modal").style.display = "flex";
