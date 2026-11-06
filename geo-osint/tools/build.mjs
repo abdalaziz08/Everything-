@@ -23,7 +23,7 @@ for (let i = stages.length - 1; i >= 0; i--) {
   const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
   const secret = new TextEncoder().encode(JSON.stringify({ flag: s.flag, next }));
   const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await key(s.city, salt), secret);
-  next = { n: i + 1, of: stages.length, level: s.level, lat: s.lat, lng: s.lng, h: s.heading, hint: s.hint,
+  next = { n: i + 1, of: stages.length, level: s.level, lat: s.lat, lng: s.lng, h: s.heading, walk: s.walk || 150, hint: s.hint,
            cc: await sha("geo-osint:" + s.cc), sec: { s: b64(salt), i: b64(iv), c: b64(new Uint8Array(ct)), it: ITER } };
 }
 

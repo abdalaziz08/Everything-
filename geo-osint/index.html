@@ -24,7 +24,8 @@
 
   /* street view */
   #sv-wrap { position:fixed; top:52px; left:0; right:0; bottom:0; }
-  #sv { width:100%; height:100%; border:0; display:block; }
+  #sv, #sv-js { width:100%; height:100%; border:0; display:block; }
+  body.js #mask-tl { display:none; }
   /* masks hide the place-name card and the links that open Google Maps */
   .mask { position:absolute; background:var(--bg); z-index:5; }
   #mask-tl { display:flex; align-items:center; justify-content:center; color:var(--mute); font-size:13px; }
@@ -79,6 +80,7 @@
   <h1>GEO OSINT <small id="stage"></small></h1>
   <span class="sp"></span>
   <span class="chip" id="tries"></span>
+  <span class="chip hide-m" id="area"></span>
   <span class="chip hide-m" id="clock">00:00</span>
   <button id="btn-hint">Hint</button>
   <button id="btn-home" title="Go back to the starting point">Back to start</button>
@@ -86,6 +88,7 @@
 
 <div id="sv-wrap">
   <iframe id="sv" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+  <div id="sv-js" style="display:none"></div>
   <div class="mask" id="mask-tl">Hidden - find it yourself</div>
   <div class="mask" id="mask-br"></div>
   <div class="mask" id="mask-bl"></div>
@@ -112,7 +115,7 @@
 (() => {
   // Stage 1 in the clear. Each stage's flag and the next stage are encrypted with
   // a key made from that stage's city name (see tools/build.mjs).
-  const FIRST = /*STAGES*/{"n":1,"of":3,"level":"Easy","lat":41.6487,"lng":41.6386,"h":95,"hint":"Don't rush to say the capital... the trees around you don't grow just anywhere in this country.","cc":"300bfc13949304f7981294084fd5bf6e8d96283998a5f194a4c9f544083e1baa","sec":{"s":"XO40dwSHYL9AScgf3/qMbQ==","i":"hAlb8WnctPDhFj6K","c":"iQuQl2+PGoXPKb69rf1Xx3ONucnp8LKF/CoDZK8P4Ty+0hCo40SjVZYAe3PxReD2p6Ejbzx+vvaLk2kCMhZiG078HzNmscd+eWfrwBfQTK5e9Bcz7kndo35ffIZfWovqQZzJMZBc3z8kMowyPIJtG7zPg2VmWjabSMcAUjkVWgOprjDi1hF1AS7D9Fqodm0JdGsHkqL8Wte54nj51q+0Y4/cAnq22cUbX0K+Ah2vKfkoj2csWCH+tYiV51fsAkAOjH6vADTOt9YcMt40/ROw4qpC5B9c5UEaBtCieW4QrYL3g5WUZYdzH7+VFvBRcA/J6NyCr+duG9IDP2SzSOUXN57mpz5HEbv6YRosezeXG7zNnCq3Ijwrmq4Ndfl0IpshhFt6OtF2qYGPAvSQmBXgp6EqW4Thpj/vSjZnEXyLgzbPEW6vIIqm955Ysp3iPsj3BdzSdwOwWCYxVNJ0js0IgH+g3HRSkD44xDElssC1qWcTtPYbrLw9Xfju68MVGeqM6abIyKd7kPM5eD4sn/P7wgEXoIt3PNjNLf8j/08jHfD3Rn2PY40eFyz7w7KjdotCjch6E/vLfbUFmEtQf2NVmuAmBaiNE5XUJiSos0pHT/UIawfk0aB9dBhcJu8ypzYB9/J9BB/lytEL5NxjCHZ1Q4k2qkPk+1S/ICCeDzwJImnB8CnGxE9XLndqhhGBFOaLe7RLl/m7dNLInR9Pnb2Nlws9sb5+P6TnRhAHaQYSxChUjov7OgsNuUGpPfzCvi1Rv0AQHtMEfPwcnRmJKB+/qyPwvyFEKArr72wXMLDbGb4NkFyFBPjfqtK/IZJlq7kaNeVCE2Nv0WVeeepMQu6uCl/mIBEt3booXoBFqBKmX5uBprz//IaDh6z2YeXdspv3z46PjDkOejv4XdC7ehphQzsmsK6U7GZagmaj4FRWItIV5BpPHrcuN0YtJLAsnfR30ZKw1nu75Y6XuVoZZF35ThXpXKJCRL6aejhbrQ6k/r59fbRvChWscdmU25Eqve047o/013xWWPDjBffGRTPLicaHLydYkqkeyx8vdcOT9BDCPuU2DvbCIsof1ZZQIRQTu4L/yCPtb0uAG7B5vPNBPte3E61bmwCzyuxPt6cViko6OgVzNRwnl6ShRXgGdAQcN6TBFpbC693oVgkkNgEDzZFXa3UReQK/zWpnFjvIdQ/Ib/uM590NZd0/rb5I2CqTi4jwSf40N3PVhMM/b5RVOjmOIyzEpN5uERV78KEXidBOGZrqDTY=","it":150000}}/*END*/;
+  const FIRST = /*STAGES*/{"n":1,"of":3,"level":"Easy","lat":41.6487,"lng":41.6386,"h":95,"walk":200,"hint":"Don't rush to say the capital... the trees around you don't grow just anywhere in this country.","cc":"300bfc13949304f7981294084fd5bf6e8d96283998a5f194a4c9f544083e1baa","sec":{"s":"i64IGPwobFzH8PhefBne1Q==","i":"6M4xw0J5wnbl9hyN","c":"mKHX22Ae1IOM4gGoI4FDytLrZA+He365qYndtJG3VG+DaqzAmcy3Ekj37ArBJBrVGNBWYGhALHfb6GqvwHtB8UzbcquE7UTXlsBWJ569+kgws5ctQcut2SK8RyI6ubTRWmgIy4leMAt/REp/L5bH+Qyag+QgqeCzRzLjSmp0yTDLR748VbWLQCwDPFKlOtTKU86DcaHckrW5TK2w9kfVljiQ/Z9dNYSSk0fCyGOr3RXzXW0MigCzpcCRitV3apniCuXa0IW250unn8uOLO9N2IFx3gmt8NvyItP5xeEZ7XwTXyOMjdH9HPfpKEEnfMJgEwDyhA5t+/ZxRheaVed4rwghxcyBvYVvR56SnQSbq0SiDVRd5lsxO3Dkqux/HTJ0ArjgePRgs5p8M9ewSW7UOnfHr6uFcgZEtHSuOe2Ksywy5PA4U3ZVfgr7/AfwywbXk4PgM2ED7GNuC14Ys4JBW1IAhWlp0mddpyWdF9DygVv6pjHixWM4WxvRQYcGSD/687ZvtZQgNPfVXYV/JoOE9r7V/nWTY3fIW4l5cF051iswNUKQqzW18rQan/3gdztfeLzPn9LVzYd4jkbHIv/SntbnM9nWnqfZC4SIrNfk11pP0aFJuAIczp1CgWjKtZBTLKu05EIgGs8DrGHC4dS/iChRGgGul6j3pKzSzpSmmtKdh6ANhPQu+7Uhasu8pTm8e18KphisYld3nK+deQDWWL5xibTNc7bk4lVImBZfOYixJehRMj691LF4NFshXXXz3O8A4JkWIKGFvANQu09pPk7HaQprjZKdMg4nQzEmuhAJFZKMHfqMdkVejk1jCXlmAMzjsDgpHlWatzyOBJ9vFtlqCp9vKUVz7yD6qSiWnz8N/G2/s/XRU2Y+XBy9fk/IIxVb+wkiHAB/1UdFHSkDZV4fm02kZn6EYPqmqqdeVHRDhMBY/dqkbMW1DiQhmQ+Sq4AaKpgVoar5UlwZByvEeUTfCqpAcNdHKyDK0V6Bnfih7TAaUZhByuilj/KG2kx8iqgaiQwBQh5ZsfsRaSDCjKEda1T7nroYPIeTl2Am3Kam1BLlYSBSrLUHwtdN+fOLEZkD9Kb0ad305T5kDgZRu/jV2/9yF7LR+TdcgRELWBAtAEoB+9q0al/kkzztLjFE7fDKkJxsN3LUJCsfZmGNhPxZuNbwpzqljKVCHsyH3r73Ejbq6dx5fHJYKaZ1vLRg7+IgdLrOkpuIK5l2mMJfnyd2RXiBaGr/G8Nqbi/eV/ooINR+48CP9/OsFhp9ZJMQemUllB6/3LEv2q5udmhL4Kw=","it":150000}}/*END*/;
 
   const MAX_TRIES = 3, LOCK_MIN = 2, KEY = "geo-osint-v2";
   const $ = id => document.getElementById(id);
@@ -134,9 +137,51 @@
     catch { return null; }
   }
 
-  // ---- street view (keyless embed, player can walk around) ----
+  // ---- street view ----
+  // With a Google Maps JavaScript API key: street names hidden and the player is kept inside
+  // a small walk area around the start. Without a key: keyless embed (free walking, labels shown).
+  // Restrict the key to this site's URL in Google Cloud, since it is visible in the page.
+  const GMAPS_KEY = "";
   const svURL = () => `https://maps.google.com/maps?q=&layer=c&cbll=${S().lat},${S().lng}&cbp=11,${S().h},0,0,0&output=svembed&t=${Date.now()}`;
-  $("btn-home").onclick = () => { $("sv").src = svURL(); };
+  let pano = null, lastOk = null, homing = false, useJS = false;
+  const startPos = () => ({ lat: S().lat, lng: S().lng });
+  const gotoStart = () => {
+    if (!useJS) { $("sv").src = svURL(); return; }
+    homing = true; pano.setPosition(startPos()); pano.setPov({ heading: S().h, pitch: 0 }); pano.setZoom(0);
+  };
+  function buildPano() {
+    pano = new google.maps.StreetViewPanorama($("sv-js"), {
+      position: startPos(), pov: { heading: S().h, pitch: 0 }, zoom: 0,
+      showRoadLabels: false, addressControl: false, linksControl: true, clickToGo: true,
+      fullscreenControl: false, motionTracking: false, motionTrackingControl: false,
+      enableCloseButton: false, imageDateControl: false });
+    homing = true;
+    pano.addListener("position_changed", () => {
+      const p = pano.getPosition(); if (!p) return;
+      const m = km(p.lat(), p.lng(), S().lat, S().lng) * 1000;
+      if (homing) { homing = false; lastOk = pano.getPano(); return; }
+      if (m > S().walk && lastOk) { say(`You can't go further. Stay within ${S().walk} m of the start.`, "warn"); pano.setPano(lastOk); }
+      else lastOk = pano.getPano();
+    });
+  }
+  function useEmbed() {
+    useJS = false; document.body.classList.remove("js");
+    $("sv-js").style.display = "none"; $("sv").style.display = "block"; $("area").textContent = "";
+    $("sv").src = svURL();
+  }
+  function startStreet() {
+    if (useJS) { $("area").textContent = `Walk area: ${S().walk} m`; gotoStart(); return; }
+    if (!GMAPS_KEY) return useEmbed();
+    useJS = true; document.body.classList.add("js");
+    $("sv").style.display = "none"; $("sv").removeAttribute("src"); $("sv-js").style.display = "block";
+    $("area").textContent = `Walk area: ${S().walk} m`;
+    window.gm_authFailure = () => { pano = null; useEmbed(); };
+    window.__gmReady = buildPano;
+    const sc = document.createElement("script");
+    sc.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GMAPS_KEY)}&v=weekly&loading=async&callback=__gmReady`;
+    sc.async = true; sc.onerror = useEmbed; document.head.appendChild(sc);
+  }
+  $("btn-home").onclick = gotoStart;
   $("btn-hint").onclick = () => { const h = $("hint"); h.style.display = h.style.display === "block" ? "none" : "block"; };
 
   // ---- timer / tries ----
@@ -145,12 +190,15 @@
   setInterval(tick, 1000);
   const showTries = () => { $("tries").textContent = `Attempts: ${Math.max(0, MAX_TRIES - st.used)}/${MAX_TRIES}`; };
 
-  // ---- maps: OpenFreeMap tiles, every label forced to English (or Latin letters), never local script ----
+  // ---- maps: OpenFreeMap tiles, labels forced to English (or Latin letters), no street names ----
   const STYLE = "https://tiles.openfreemap.org/styles/liberty";
   const english = m => m.on("style.load", () => {
     for (const l of m.getStyle().layers)
       if (l.type === "symbol" && m.getLayoutProperty(l.id, "text-field"))
         m.setLayoutProperty(l.id, "text-field", ["coalesce", ["get", "name:en"], ["get", "name:latin"], ""]);
+    // no street names, house numbers or points of interest (bus stops carry street names)
+    for (const l of m.getStyle().layers)
+      if (["transportation_name", "housenumber", "poi"].includes(l["source-layer"])) m.setLayoutProperty(l.id, "visibility", "none");
   });
   const makeMap = (el, opts = {}) => {
     const m = new maplibregl.Map({ container: el, style: STYLE, center: [20, 25], zoom: 0.4, attributionControl: { compact: true }, dragRotate: false, ...opts });
@@ -172,7 +220,7 @@
     const s = S();
     $("stage").textContent = `- Stage ${s.n}/${s.of} (${s.level})`;
     $("hint").innerHTML = `<b>Hint:</b> ${s.hint}`; $("hint").style.display = "none";
-    $("sv").src = svURL();
+    startStreet();
     if (pin) { pin.remove(); pin = null; }
     map.jumpTo({ center: [20, 25], zoom: 0.4 });
     $("guess").disabled = true; $("guess").textContent = "Place a pin on the map";

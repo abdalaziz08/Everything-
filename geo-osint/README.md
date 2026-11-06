@@ -24,8 +24,14 @@ without solving the earlier ones.
 To change stages: put them in `tools/stages.json` (kept out of git, same fields as before: lat, lng,
 heading, cc, city, hint, flag, level) and run `node tools/build.mjs`. It rewrites the data inside `index.html`.
 
+## Google Maps key (walk limit + no street names)
+
+Set `GMAPS_KEY` near the top of the script in `index.html` to a Google Maps JavaScript API key. With a key:
+street names are hidden in Street View, and the player can only walk within `walk` metres of the start
+(Easy 200 m, Medium 150 m, Hard 120 m). Without a key the page falls back to the keyless embed (free walking).
+Restrict the key in Google Cloud to `https://abdalaziz5.onrender.com/*` - it is visible in the page.
+
 ## Notes
 
-- Street View is embedded from Google without a key, so players can walk far from the start (limiting the area needs an API key).
-- The map uses OpenFreeMap tiles (free, no key) with every label forced to English, or Latin letters when there is no English name.
+- The map uses OpenFreeMap tiles (free, no key) with every label forced to English (or Latin letters), and street names, house numbers and points of interest hidden.
 - The current stage's Street View coordinates are visible in DevTools (the iframe needs them). That only spoils the stage you're on, not the later ones.
