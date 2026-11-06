@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>GEO OSINT - Where Am I?</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <style>
   :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --txt:#e6edf3; --mute:#8b949e; --acc:#2ea043; --warn:#d29922; --bad:#f85149; }
   * { box-sizing:border-box; }
@@ -53,7 +53,8 @@
   #modal { position:fixed; inset:0; z-index:40; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; padding:16px; }
   #card { background:var(--panel); border:1px solid var(--line); border-radius:14px; width:min(640px,100%); padding:18px; text-align:center; }
   #card h2 { margin:0 0 6px; }
-  #rmap { height:300px; border-radius:10px; margin:12px 0; }
+  #rmap { height:300px; border-radius:10px; margin:12px 0; overflow:hidden; }
+  .maplibregl-popup-content { color:#111; font-size:13px; padding:4px 8px; }
   #flag { font-family:ui-monospace,Consolas,monospace; background:#0d1117; border:1px dashed var(--acc); color:#7ee787; padding:10px; border-radius:8px;
           direction:ltr; user-select:all; word-break:break-all; }
 
@@ -106,7 +107,7 @@
   <div id="card"></div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script>
 (() => {
   // Stage 1 in the clear. Each stage's flag and the next stage are encrypted with
@@ -144,15 +145,28 @@
   setInterval(tick, 1000);
   const showTries = () => { $("tries").textContent = `Attempts: ${Math.max(0, MAX_TRIES - st.used)}/${MAX_TRIES}`; };
 
+  // ---- maps: OpenFreeMap tiles, every label forced to English (or Latin letters), never local script ----
+  const STYLE = "https://tiles.openfreemap.org/styles/liberty";
+  const english = m => m.on("style.load", () => {
+    for (const l of m.getStyle().layers)
+      if (l.type === "symbol" && m.getLayoutProperty(l.id, "text-field"))
+        m.setLayoutProperty(l.id, "text-field", ["coalesce", ["get", "name:en"], ["get", "name:latin"], ""]);
+  });
+  const makeMap = (el, opts = {}) => {
+    const m = new maplibregl.Map({ container: el, style: STYLE, center: [20, 25], zoom: 0.4, attributionControl: { compact: true }, dragRotate: false, ...opts });
+    m.touchZoomRotate.disableRotation(); m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
+    m.on("load", () => m.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show"));
+    english(m); return m;
+  };
+
   // ---- guess map ----
-  const map = L.map("map", { worldCopyJump: true, zoomControl: true }).setView([25, 20], 1);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+  const map = makeMap("map");
   let pin = null;
   map.on("click", e => {
-    if (pin) pin.setLatLng(e.latlng); else pin = L.marker(e.latlng).addTo(map);
+    if (pin) pin.setLngLat(e.lngLat); else pin = new maplibregl.Marker({ color: "#3b82f6" }).setLngLat(e.lngLat).addTo(map);
     $("guess").disabled = false; $("guess").textContent = "Confirm guess";
   });
-  $("grow").onclick = () => { const b = $("mapbox").classList.toggle("big"); $("grow").textContent = b ? "Shrink" : "Expand"; setTimeout(() => map.invalidateSize(), 250); };
+  $("grow").onclick = () => { const b = $("mapbox").classList.toggle("big"); $("grow").textContent = b ? "Shrink" : "Expand"; setTimeout(() => map.resize(), 250); };
 
   function loadStage() {
     const s = S();
@@ -160,7 +174,7 @@
     $("hint").innerHTML = `<b>Hint:</b> ${s.hint}`; $("hint").style.display = "none";
     $("sv").src = svURL();
     if (pin) { pin.remove(); pin = null; }
-    map.setView([25, 20], 1);
+    map.jumpTo({ center: [20, 25], zoom: 0.4 });
     $("guess").disabled = true; $("guess").textContent = "Place a pin on the map";
     showTries(); tick();
   }
@@ -195,7 +209,7 @@
     if (st.lockUntil) { st.used = 0; st.lockUntil = 0; }
 
     busy = true;
-    const g = pin.getLatLng().wrap();
+    const g = pin.getLngLat().wrap();
     $("guess").disabled = true; $("guess").textContent = "Checking...";
     const info = await where(g.lat, g.lng);
     let opened = null;
@@ -244,13 +258,16 @@
       st.cur = w.next; st.won = null; st.used = 0; st.lockUntil = 0; st.end = 0; st.start = Date.now(); save();
       $("modal").style.display = "none"; loadStage();
     };
-    const rm = L.map("rmap");
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(rm);
-    const t = [s.lat, s.lng], u = [w.lat, w.lng];
-    L.marker(u).addTo(rm).bindTooltip("Your guess");
-    L.circleMarker(t, { radius: 9, color: "#2ea043", fillOpacity: .9 }).addTo(rm).bindTooltip("Correct spot", { permanent: true });
-    L.polyline([u, t], { color: "#d29922", dashArray: "6 6" }).addTo(rm);
-    rm.fitBounds(L.latLngBounds([u, t]).pad(0.4), { maxZoom: 16 });
+    const t = [s.lng, s.lat], u = [w.lng, w.lat];
+    const rm = makeMap("rmap", { bounds: new maplibregl.LngLatBounds(t, t).extend(u), fitBoundsOptions: { padding: 60, maxZoom: 15 } });
+    const tag = txt => new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 30 }).setText(txt);
+    new maplibregl.Marker({ color: "#3b82f6" }).setLngLat(u).setPopup(tag("Your guess")).addTo(rm);
+    const ok = new maplibregl.Marker({ color: "#2ea043" }).setLngLat(t).setPopup(tag("Correct spot")).addTo(rm);
+    rm.on("load", () => {
+      ok.togglePopup();
+      rm.addSource("line", { type: "geojson", data: { type: "Feature", geometry: { type: "LineString", coordinates: [u, t] } } });
+      rm.addLayer({ id: "line", type: "line", source: "line", paint: { "line-color": "#d29922", "line-width": 3, "line-dasharray": [2, 2] } });
+    });
   }
 
   // ---- intro / resume ----

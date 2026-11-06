@@ -27,4 +27,5 @@ heading, cc, city, hint, flag, level) and run `node tools/build.mjs`. It rewrite
 ## Notes
 
 - Street View is embedded from Google without a key, so players can walk far from the start (limiting the area needs an API key).
+- The map uses OpenFreeMap tiles (free, no key) with every label forced to English, or Latin letters when there is no English name.
 - The current stage's Street View coordinates are visible in DevTools (the iframe needs them). That only spoils the stage you're on, not the later ones.
