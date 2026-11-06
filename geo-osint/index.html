@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>GEO OSINT #1 — وين أنا؟</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --txt:#e6edf3; --mute:#8b949e; --acc:#2ea043; --warn:#d29922; --bad:#f85149; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--txt); font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif; overflow:hidden; }
+
+  /* top bar */
+  #bar { position:fixed; top:0; left:0; right:0; height:52px; z-index:20; display:flex; align-items:center; gap:8px; padding:0 12px;
+         background:rgba(13,17,23,.92); border-bottom:1px solid var(--line); backdrop-filter:blur(6px); }
+  #bar h1 { font-size:16px; margin:0; white-space:nowrap; }
+  #bar h1 small { color:var(--mute); font-weight:normal; }
+  #bar .sp { flex:1; }
+  .chip { font-size:13px; color:var(--mute); white-space:nowrap; }
+  button { font:inherit; cursor:pointer; border:1px solid var(--line); background:var(--panel); color:var(--txt); border-radius:8px; padding:7px 12px; font-size:14px; }
+  button:hover { border-color:#58a6ff; }
+  button.pri { background:var(--acc); border-color:var(--acc); color:#fff; font-weight:600; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+
+  /* street view */
+  #sv-wrap { position:fixed; top:52px; left:0; right:0; bottom:0; }
+  #sv { width:100%; height:100%; border:0; display:block; }
+  /* masks hide the place-name card and the links that open Google Maps */
+  .mask { position:absolute; background:var(--bg); z-index:5; }
+  #mask-tl { display:flex; align-items:center; justify-content:center; color:var(--mute); font-size:13px; }
+  #mask-tl { top:0; left:0; width:230px; height:84px; border-bottom-right-radius:10px; }
+  #mask-br { bottom:0; right:0; width:420px; height:22px; }
+  #mask-bl { bottom:0; left:0; width:120px; height:22px; }
+
+  /* hint */
+  #hint { position:fixed; top:64px; right:12px; z-index:15; max-width:320px; background:rgba(22,27,34,.95); border:1px solid var(--warn);
+          border-radius:10px; padding:10px 14px; font-size:14px; line-height:1.6; display:none; }
+  #hint b { color:var(--warn); }
+
+  /* map panel */
+  #mapbox { position:fixed; left:14px; bottom:14px; z-index:15; width:300px; height:220px; background:var(--panel); border:1px solid var(--line);
+            border-radius:12px; overflow:hidden; transition:width .2s,height .2s; display:flex; flex-direction:column; box-shadow:0 8px 30px rgba(0,0,0,.5); }
+  #mapbox.big { width:min(640px,calc(100vw - 28px)); height:min(480px,calc(100vh - 90px)); }
+  #map { flex:1; }
+  #mapbar { display:flex; gap:6px; padding:6px; border-top:1px solid var(--line); }
+  #mapbar button { flex:1; padding:8px 6px; }
+  #mapbar #grow { flex:0 0 42px; }
+  #msg { position:fixed; left:50%; transform:translateX(-50%); bottom:250px; z-index:25; padding:10px 16px; border-radius:10px; font-size:15px;
+         background:var(--panel); border:1px solid var(--line); display:none; text-align:center; max-width:90vw; }
+  #msg.bad { border-color:var(--bad); } #msg.warn { border-color:var(--warn); }
+
+  /* modal */
+  #modal { position:fixed; inset:0; z-index:40; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; padding:16px; }
+  #card { background:var(--panel); border:1px solid var(--line); border-radius:14px; width:min(640px,100%); padding:18px; text-align:center; }
+  #card h2 { margin:0 0 6px; }
+  #rmap { height:300px; border-radius:10px; margin:12px 0; }
+  #flag { font-family:ui-monospace,Consolas,monospace; background:#0d1117; border:1px dashed var(--acc); color:#7ee787; padding:10px; border-radius:8px;
+          direction:ltr; user-select:all; word-break:break-all; }
+
+  #intro p { color:var(--mute); line-height:1.8; margin:6px 0; text-align:right; }
+  #intro ul { text-align:right; line-height:1.9; padding-right:18px; margin:8px 0 14px; }
+
+  @media (max-width:640px) {
+    #bar h1 small, .chip.hide-m { display:none; }
+    #mapbox { left:8px; right:8px; bottom:8px; width:auto; height:190px; }
+    #mapbox.big { width:auto; height:calc(100vh - 80px); }
+    #mask-tl { width:200px; height:80px; }
+    #mask-br { width:100%; }
+    #msg { bottom:210px; }
+    #hint { left:12px; max-width:none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <h1>🌍 GEO OSINT #1 <small>— وين أنا؟</small></h1>
+  <span class="sp"></span>
+  <span class="chip" id="tries"></span>
+  <span class="chip hide-m" id="clock">00:00</span>
+  <button id="btn-hint">💡 هنت</button>
+  <button id="btn-home" title="ارجع لنقطة البداية">📍 البداية</button>
+</div>
+
+<div id="sv-wrap">
+  <iframe id="sv" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+  <div class="mask" id="mask-tl">🕵️ مخفي — دوّر لحالك</div>
+  <div class="mask" id="mask-br"></div>
+  <div class="mask" id="mask-bl"></div>
+</div>
+
+<div id="hint">
+  <b>💡 هنت:</b> لا تستعجل وتحكي العاصمة 😉 … الشجر اللي حواليك ما بيطلع بأي مكان بهاي البلد.
+</div>
+
+<div id="mapbox">
+  <div id="map"></div>
+  <div id="mapbar">
+    <button id="grow" title="كبّر/صغّر الخريطة">⤢</button>
+    <button id="guess" class="pri" disabled>حط دبوس عالخريطة</button>
+  </div>
+</div>
+
+<div id="msg"></div>
+
+<div id="modal">
+  <div id="card"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(() => {
+  // ---- hidden answer (lightly encoded so it isn't sitting in plain text) ----
+  const D = JSON.parse(Array.from(new TextDecoder().decode(Uint8Array.from(atob(
+    "fSJ9dTB5X2RsMHRfc21sNHBfM2h0XzFzMWwxYnRfdDBue0dBTEYiIDoiZ2FsZiIgLDYgOiJyIiAsImVnIiA6ImNjIiAsXSLQuNC80YPRgtCw0LEiICwi4YOY4YOb4YOj4YOX4YOQ4YORIiAsImltdXRhYiJbIDoieXRpYyIgLDY4MzYuMTQgOiJnbmwiICw3ODQ2LjE0IDoidGFsIns="
+  ), c => c.charCodeAt(0)))).reverse().join(""));
+
+  const MAX_TRIES = 3, LOCK_MIN = 2, KEY = "geo1";
+  const $ = id => document.getElementById(id);
+  const st = JSON.parse(localStorage.getItem(KEY) || "{}");
+  st.used ??= 0; st.start ??= Date.now();
+  const save = () => localStorage.setItem(KEY, JSON.stringify(st));
+  save();
+
+  // ---- street view (keyless embed, player can walk around) ----
+  const svURL = () => `https://maps.google.com/maps?q=&layer=c&cbll=${D.lat},${D.lng}&cbp=11,95,0,0,0&output=svembed&t=${Date.now()}`;
+  $("sv").src = svURL();
+  $("btn-home").onclick = () => { $("sv").src = svURL(); };
+  $("btn-hint").onclick = () => { const h = $("hint"); h.style.display = h.style.display === "block" ? "none" : "block"; };
+
+  // ---- timer / tries ----
+  const fmt = ms => { const s = Math.floor(ms / 1000); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
+  const tick = () => { $("clock").textContent = fmt((st.end || Date.now()) - st.start); };
+  setInterval(tick, 1000); tick();
+  const showTries = () => { $("tries").textContent = `المحاولات: ${Math.max(0, MAX_TRIES - st.used)}/${MAX_TRIES}`; };
+  showTries();
+
+  // ---- guess map ----
+  const map = L.map("map", { worldCopyJump: true, zoomControl: true }).setView([25, 20], 1);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+  let pin = null;
+  map.on("click", e => {
+    if (pin) pin.setLatLng(e.latlng); else pin = L.marker(e.latlng).addTo(map);
+    $("guess").disabled = false; $("guess").textContent = "✅ أكّد التخمين";
+  });
+  $("grow").onclick = () => { $("mapbox").classList.toggle("big"); setTimeout(() => map.invalidateSize(), 250); };
+
+  // ---- helpers ----
+  const km = (a, b, c, d) => {
+    const R = 6371, r = x => x * Math.PI / 180;
+    const h = Math.sin(r(c - a) / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(r(d - b) / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  };
+  let msgT;
+  const say = (html, cls = "") => {
+    const m = $("msg"); m.className = cls; m.innerHTML = html; m.style.display = "block";
+    clearTimeout(msgT); msgT = setTimeout(() => m.style.display = "none", 6000);
+  };
+  async function where(lat, lng) {
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10&accept-language=en`);
+      const a = (await r.json()).address || {};
+      return { cc: a.country_code || "", city: a.city || a.town || a.village || a.county || "", country: a.country || "" };
+    } catch { return null; }
+  }
+  const lockedFor = () => st.lockUntil ? Math.max(0, st.lockUntil - Date.now()) : 0;
+
+  // ---- guessing ----
+  $("guess").onclick = async () => {
+    if (!pin || st.won) return;
+    const left = lockedFor();
+    if (left) return say(`🔒 خلصت محاولاتك. استنى ${fmt(left)} وجرب كمان مرة.`, "bad");
+    if (st.lockUntil) { st.used = 0; st.lockUntil = 0; }
+
+    const g = pin.getLatLng().wrap();
+    $("guess").disabled = true; $("guess").textContent = "⏳ عم نفحص…";
+    const dist = km(g.lat, g.lng, D.lat, D.lng);
+    const info = await where(g.lat, g.lng);
+    const cityHit = info && D.city.includes(info.city.toLowerCase());
+    $("guess").disabled = false; $("guess").textContent = "✅ أكّد التخمين";
+
+    if (cityHit || dist <= D.r) return win(g, dist);
+
+    st.used++;
+    if (st.used >= MAX_TRIES) st.lockUntil = Date.now() + LOCK_MIN * 60000;
+    save(); showTries();
+
+    const rest = MAX_TRIES - st.used;
+    const tail = rest > 0 ? `<br><small>ضايلك ${rest} محاولة</small>` : `<br><small>🔒 خلصت المحاولات — ارجع بعد ${LOCK_MIN} دقايق</small>`;
+    if (info && info.cc === D.cc)
+      say(`🟡 الدولة صح! بس <b>${info.city || "هاد المكان"}</b> مش المدينة. لازم تحدد المدينة.${tail}`, "warn");
+    else if (info)
+      say(`❌ لا، مش هون${info.country ? ` (${info.country})` : ""}. ركّز بالتفاصيل حواليك.${tail}`, "bad");
+    else
+      say(`❌ غلط.${tail}`, "bad");
+  };
+
+  function win(g, dist) {
+    st.won = true; st.end = st.end || Date.now(); save(); tick();
+    const level = dist <= 0.3 ? "🎯 بالشارع نفسه!" : dist <= 1.5 ? "🔥 الحارة صح" : "✅ المدينة صح";
+    $("card").innerHTML = `
+      <h2>🎉 مبروك! لقيتها</h2>
+      <div>${level} — بعدك عن المكان: <b>${dist < 1 ? Math.round(dist * 1000) + " م" : dist.toFixed(2) + " كم"}</b> · الوقت: <b>${fmt(st.end - st.start)}</b></div>
+      <div id="rmap"></div>
+      <div style="margin-bottom:6px;color:var(--mute)">الفلاج:</div>
+      <div id="flag">${D.flag}</div>
+      <div style="margin-top:14px"><button onclick="localStorage.removeItem('${KEY}');location.reload()">🔁 من الأول</button></div>`;
+    $("modal").style.display = "flex";
+    const rm = L.map("rmap");
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(rm);
+    const t = [D.lat, D.lng], u = [g.lat, g.lng];
+    L.marker(u).addTo(rm).bindTooltip("تخمينك");
+    L.circleMarker(t, { radius: 9, color: "#2ea043", fillOpacity: .9 }).addTo(rm).bindTooltip("المكان الصح", { permanent: true });
+    L.polyline([u, t], { color: "#d29922", dashArray: "6 6" }).addTo(rm);
+    rm.fitBounds(L.latLngBounds([u, t]).pad(0.4), { maxZoom: 16 });
+  }
+
+  // ---- intro / resume ----
+  if (st.won) { win({ lat: D.lat, lng: D.lng }, 0); return; }
+  if (!st.seen) {
+    $("card").innerHTML = `<div id="intro">
+      <h2>🌍 GEO OSINT #1 — وين أنا؟</h2>
+      <p>انرميت بمكان ما على كوكب الأرض. ما معك غير عيونك.</p>
+      <ul>
+        <li>🚶 امشي بالشارع (اضغط على الأسهم أو اسحب الصورة)، ولف حواليك.</li>
+        <li>🔎 دوّر على أي دليل: لغة اليافطات، الشجر، العمارة، السيارات…</li>
+        <li>🗺️ لما تعرف، افتح الخريطة تحت، حط دبوس، وأكّد.</li>
+        <li>🏙️ لازم تحدد <b>المدينة</b> على الأقل — الدولة لحالها ما بتكفي.</li>
+        <li>⚠️ معك ${MAX_TRIES} محاولات بس. وفي 💡 هنت فوق إذا علقت.</li>
+      </ul>
+      <button class="pri" id="go">يلا نبلش</button></div>`;
+    $("modal").style.display = "flex";
+    $("go").onclick = () => { st.seen = true; st.start = Date.now(); save(); $("modal").style.display = "none"; };
+  }
+})();
+</script>
+</body>
+</html>
