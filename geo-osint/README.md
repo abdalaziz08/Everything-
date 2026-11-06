@@ -1,18 +1,20 @@
-# GEO OSINT #1 — وين أنا؟
+# GEO OSINT #1 - Where am I?
 
-تحدي Geo-OSINT: بتنرمى بمكان على كوكب الأرض (Street View)، بتقدر تمشي وتلف، وفي 💡 هنت خفيف.
-لما تعرف وين انت، بتحط دبوس عالخريطة. **لازم تحدد المدينة على الأقل** — الدولة لحالها ما بتكفي.
+A Geo-OSINT challenge. You get dropped somewhere on Earth in Street View, you can walk and look around, and there is a light hint.
+When you know where you are, place a pin on the map. **You must get at least the city right** - the country alone is not enough.
 
-- ٣ محاولات، بعدها قفل دقيقتين.
-- كل محاولة غلط بتقلك بس: الدولة غلط، أو الدولة صح والمدينة غلط (بدون مسافة، عشان ما ينحسب المكان بالتثليث).
-- الفوز = الدبوس جوا حدود المدينة (فحص عن طريق OpenStreetMap/Nominatim) أو ضمن ٦ كم من المكان. بعدها بيطلع الفلاج.
+- 3 attempts, then a 2-minute lock.
+- A wrong guess only tells you "wrong country" or "right country, wrong city" (no distance, so the spot can't be triangulated).
+- You win if the pin is inside the city (checked with OpenStreetMap / Nominatim) or within 6 km of the spot. Then the flag is shown.
 
-## التشغيل
+## Running
 
-ملف واحد `index.html`، ما بدو سيرفر ولا مفتاح API. افتحه من أي استضافة ثابتة (GitHub Pages، Render Static Site، Netlify…)
-أو محلياً: `python3 -m http.server` جوا المجلد.
+One file, `index.html`. No server and no API key. Host it on any static host (Render Static Site, GitHub Pages, Netlify...)
+or locally: `python3 -m http.server` inside this folder.
 
-## ملاحظات
+Live: https://abdalaziz5.onrender.com
 
-- الـ Street View مُضمَّن من Google بدون مفتاح، فاللاعب بيقدر يمشي بعيد عن نقطة البداية (ما في طريقة نحدد المساحة بدون مفتاح API).
-- الجواب والفلاج مشفّرين تشفير خفيف بالصفحة، بس أي حدا بيفتح DevTools بيقدر يشوف إحداثيات الـ iframe. للعب العادي تمام؛ لـ CTF جدّي لازم سيرفر.
+## Notes
+
+- Street View is embedded from Google without a key, so players can walk far from the start (limiting the area needs an API key).
+- The answer and flag are lightly encoded in the page, but anyone who opens DevTools can read the iframe coordinates. Fine for casual play; a serious CTF needs a server.

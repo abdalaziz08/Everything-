@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>GEO OSINT #1 — وين أنا؟</title>
+<title>GEO OSINT #1 - Where Am I?</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --txt:#e6edf3; --mute:#8b949e; --acc:#2ea043; --warn:#d29922; --bad:#f85149; }
@@ -44,7 +44,7 @@
   #map { flex:1; }
   #mapbar { display:flex; gap:6px; padding:6px; border-top:1px solid var(--line); }
   #mapbar button { flex:1; padding:8px 6px; }
-  #mapbar #grow { flex:0 0 42px; }
+  #mapbar #grow { flex:0 0 74px; }
   #msg { position:fixed; left:50%; transform:translateX(-50%); bottom:250px; z-index:25; padding:10px 16px; border-radius:10px; font-size:15px;
          background:var(--panel); border:1px solid var(--line); display:none; text-align:center; max-width:90vw; }
   #msg.bad { border-color:var(--bad); } #msg.warn { border-color:var(--warn); }
@@ -57,8 +57,8 @@
   #flag { font-family:ui-monospace,Consolas,monospace; background:#0d1117; border:1px dashed var(--acc); color:#7ee787; padding:10px; border-radius:8px;
           direction:ltr; user-select:all; word-break:break-all; }
 
-  #intro p { color:var(--mute); line-height:1.8; margin:6px 0; text-align:right; }
-  #intro ul { text-align:right; line-height:1.9; padding-right:18px; margin:8px 0 14px; }
+  #intro p { color:var(--mute); line-height:1.7; margin:6px 0; text-align:left; }
+  #intro ul { text-align:left; line-height:1.8; padding-left:20px; margin:8px 0 14px; }
 
   @media (max-width:640px) {
     #bar h1 small, .chip.hide-m { display:none; }
@@ -74,30 +74,30 @@
 <body>
 
 <div id="bar">
-  <h1>🌍 GEO OSINT #1 <small>— وين أنا؟</small></h1>
+  <h1>GEO OSINT #1 <small>- Where am I?</small></h1>
   <span class="sp"></span>
   <span class="chip" id="tries"></span>
   <span class="chip hide-m" id="clock">00:00</span>
-  <button id="btn-hint">💡 هنت</button>
-  <button id="btn-home" title="ارجع لنقطة البداية">📍 البداية</button>
+  <button id="btn-hint">Hint</button>
+  <button id="btn-home" title="Go back to the starting point">Back to start</button>
 </div>
 
 <div id="sv-wrap">
   <iframe id="sv" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
-  <div class="mask" id="mask-tl">🕵️ مخفي — دوّر لحالك</div>
+  <div class="mask" id="mask-tl">Hidden - find it yourself</div>
   <div class="mask" id="mask-br"></div>
   <div class="mask" id="mask-bl"></div>
 </div>
 
 <div id="hint">
-  <b>💡 هنت:</b> لا تستعجل وتحكي العاصمة 😉 … الشجر اللي حواليك ما بيطلع بأي مكان بهاي البلد.
+  <b>Hint:</b> Don't rush to say the capital... the trees around you don't grow just anywhere in this country.
 </div>
 
 <div id="mapbox">
   <div id="map"></div>
   <div id="mapbar">
-    <button id="grow" title="كبّر/صغّر الخريطة">⤢</button>
-    <button id="guess" class="pri" disabled>حط دبوس عالخريطة</button>
+    <button id="grow" title="Enlarge / shrink the map">Expand</button>
+    <button id="guess" class="pri" disabled>Place a pin on the map</button>
   </div>
 </div>
 
@@ -132,7 +132,7 @@
   const fmt = ms => { const s = Math.floor(ms / 1000); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
   const tick = () => { $("clock").textContent = fmt((st.end || Date.now()) - st.start); };
   setInterval(tick, 1000); tick();
-  const showTries = () => { $("tries").textContent = `المحاولات: ${Math.max(0, MAX_TRIES - st.used)}/${MAX_TRIES}`; };
+  const showTries = () => { $("tries").textContent = `Attempts: ${Math.max(0, MAX_TRIES - st.used)}/${MAX_TRIES}`; };
   showTries();
 
   // ---- guess map ----
@@ -141,9 +141,9 @@
   let pin = null;
   map.on("click", e => {
     if (pin) pin.setLatLng(e.latlng); else pin = L.marker(e.latlng).addTo(map);
-    $("guess").disabled = false; $("guess").textContent = "✅ أكّد التخمين";
+    $("guess").disabled = false; $("guess").textContent = "Confirm guess";
   });
-  $("grow").onclick = () => { $("mapbox").classList.toggle("big"); setTimeout(() => map.invalidateSize(), 250); };
+  $("grow").onclick = () => { const b = $("mapbox").classList.toggle("big"); $("grow").textContent = b ? "Shrink" : "Expand"; setTimeout(() => map.invalidateSize(), 250); };
 
   // ---- helpers ----
   const km = (a, b, c, d) => {
@@ -169,15 +169,15 @@
   $("guess").onclick = async () => {
     if (!pin || st.won) return;
     const left = lockedFor();
-    if (left) return say(`🔒 خلصت محاولاتك. استنى ${fmt(left)} وجرب كمان مرة.`, "bad");
+    if (left) return say(`Out of attempts. Wait ${fmt(left)} and try again.`, "bad");
     if (st.lockUntil) { st.used = 0; st.lockUntil = 0; }
 
     const g = pin.getLatLng().wrap();
-    $("guess").disabled = true; $("guess").textContent = "⏳ عم نفحص…";
+    $("guess").disabled = true; $("guess").textContent = "Checking...";
     const dist = km(g.lat, g.lng, D.lat, D.lng);
     const info = await where(g.lat, g.lng);
     const cityHit = info && D.city.includes(info.city.toLowerCase());
-    $("guess").disabled = false; $("guess").textContent = "✅ أكّد التخمين";
+    $("guess").disabled = false; $("guess").textContent = "Confirm guess";
 
     if (cityHit || dist <= D.r) return win(g, dist);
 
@@ -186,31 +186,31 @@
     save(); showTries();
 
     const rest = MAX_TRIES - st.used;
-    const tail = rest > 0 ? `<br><small>ضايلك ${rest} محاولة</small>` : `<br><small>🔒 خلصت المحاولات — ارجع بعد ${LOCK_MIN} دقايق</small>`;
+    const tail = rest > 0 ? `<br><small>${rest} attempt${rest > 1 ? "s" : ""} left</small>` : `<br><small>Out of attempts - come back in ${LOCK_MIN} minutes</small>`;
     if (info && info.cc === D.cc)
-      say(`🟡 الدولة صح! بس <b>${info.city || "هاد المكان"}</b> مش المدينة. لازم تحدد المدينة.${tail}`, "warn");
+      say(`Right country! But <b>${info.city || "that spot"}</b> is not the city. You need the exact city.${tail}`, "warn");
     else if (info)
-      say(`❌ لا، مش هون${info.country ? ` (${info.country})` : ""}. ركّز بالتفاصيل حواليك.${tail}`, "bad");
+      say(`Wrong country${info.country ? ` (${info.country})` : ""}. Look closer at the details around you.${tail}`, "bad");
     else
-      say(`❌ غلط.${tail}`, "bad");
+      say(`Wrong.${tail}`, "bad");
   };
 
   function win(g, dist) {
     st.won = true; st.end = st.end || Date.now(); save(); tick();
-    const level = dist <= 0.3 ? "🎯 بالشارع نفسه!" : dist <= 1.5 ? "🔥 الحارة صح" : "✅ المدينة صح";
+    const level = dist <= 0.3 ? "Same street!" : dist <= 1.5 ? "Right neighborhood" : "Right city";
     $("card").innerHTML = `
-      <h2>🎉 مبروك! لقيتها</h2>
-      <div>${level} — بعدك عن المكان: <b>${dist < 1 ? Math.round(dist * 1000) + " م" : dist.toFixed(2) + " كم"}</b> · الوقت: <b>${fmt(st.end - st.start)}</b></div>
+      <h2>You found it!</h2>
+      <div>${level} - Distance: <b>${dist < 1 ? Math.round(dist * 1000) + " m" : dist.toFixed(2) + " km"}</b> &middot; Time: <b>${fmt(st.end - st.start)}</b></div>
       <div id="rmap"></div>
-      <div style="margin-bottom:6px;color:var(--mute)">الفلاج:</div>
+      <div style="margin-bottom:6px;color:var(--mute)">Flag:</div>
       <div id="flag">${D.flag}</div>
-      <div style="margin-top:14px"><button onclick="localStorage.removeItem('${KEY}');location.reload()">🔁 من الأول</button></div>`;
+      <div style="margin-top:14px"><button onclick="localStorage.removeItem('${KEY}');location.reload()">Play again</button></div>`;
     $("modal").style.display = "flex";
     const rm = L.map("rmap");
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(rm);
     const t = [D.lat, D.lng], u = [g.lat, g.lng];
-    L.marker(u).addTo(rm).bindTooltip("تخمينك");
-    L.circleMarker(t, { radius: 9, color: "#2ea043", fillOpacity: .9 }).addTo(rm).bindTooltip("المكان الصح", { permanent: true });
+    L.marker(u).addTo(rm).bindTooltip("Your guess");
+    L.circleMarker(t, { radius: 9, color: "#2ea043", fillOpacity: .9 }).addTo(rm).bindTooltip("Correct spot", { permanent: true });
     L.polyline([u, t], { color: "#d29922", dashArray: "6 6" }).addTo(rm);
     rm.fitBounds(L.latLngBounds([u, t]).pad(0.4), { maxZoom: 16 });
   }
@@ -219,16 +219,16 @@
   if (st.won) { win({ lat: D.lat, lng: D.lng }, 0); return; }
   if (!st.seen) {
     $("card").innerHTML = `<div id="intro">
-      <h2>🌍 GEO OSINT #1 — وين أنا؟</h2>
-      <p>انرميت بمكان ما على كوكب الأرض. ما معك غير عيونك.</p>
+      <h2>GEO OSINT #1 - Where am I?</h2>
+      <p>You've been dropped somewhere on planet Earth. All you have is your eyes.</p>
       <ul>
-        <li>🚶 امشي بالشارع (اضغط على الأسهم أو اسحب الصورة)، ولف حواليك.</li>
-        <li>🔎 دوّر على أي دليل: لغة اليافطات، الشجر، العمارة، السيارات…</li>
-        <li>🗺️ لما تعرف، افتح الخريطة تحت، حط دبوس، وأكّد.</li>
-        <li>🏙️ لازم تحدد <b>المدينة</b> على الأقل — الدولة لحالها ما بتكفي.</li>
-        <li>⚠️ معك ${MAX_TRIES} محاولات بس. وفي 💡 هنت فوق إذا علقت.</li>
+        <li>Walk down the street (click the arrows or drag the view) and look around.</li>
+        <li>Look for any clue: the language on signs, trees, architecture, cars...</li>
+        <li>When you know, open the map below, place a pin, and confirm.</li>
+        <li>You must pin at least the right <b>city</b> - the country alone is not enough.</li>
+        <li>You only get ${MAX_TRIES} attempts. There's a hint button at the top if you get stuck.</li>
       </ul>
-      <button class="pri" id="go">يلا نبلش</button></div>`;
+      <button class="pri" id="go">Start</button></div>`;
     $("modal").style.display = "flex";
     $("go").onclick = () => { st.seen = true; st.start = Date.now(); save(); $("modal").style.display = "none"; };
   }
