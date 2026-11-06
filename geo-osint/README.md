@@ -1,37 +1,33 @@
 # GEO OSINT - Where am I?
 
-A Geo-OSINT challenge. You get dropped somewhere on Earth in Street View, you can walk and look around, and there is a light hint.
-When you know where you are, place a pin on the map. **You must get at least the city right** - the country alone is not enough.
+A Geo-OSINT challenge in 3 stages (Easy, Medium, Hard). You get dropped on a street somewhere on Earth.
+Walk along it (Forward / Back, or W / S), look around, zoom in, and find clues. When you know where you are,
+pin it on the map. **You must get at least the city right** - the country alone is not enough.
 
-- 3 stages (Easy, Medium, Hard). Solving a stage shows its flag and a **Next stage** button.
-- 3 attempts per stage, then a 2-minute lock.
-- A wrong guess only tells you "wrong country" or "right country, wrong city" (no distance, so the spot can't be triangulated).
-- A stage is solved when the pin is inside the right city (looked up with OpenStreetMap / Nominatim).
-
-## Running
-
-One file, `index.html`. No server and no API key. Host it on any static host (Render Static Site, GitHub Pages, Netlify...)
-or locally: `python3 -m http.server` inside this folder.
+- Each stage is one short stretch of street (about 100-250 m). You can't walk anywhere else.
+- No street names: not on the map, not printed on the road.
+- 3 attempts per stage, then a 2-minute lock. A wrong guess only says "wrong country" or "right country, wrong city".
+- Solving a stage shows its flag and a **Next stage** button.
 
 Live: https://abdalaziz5.onrender.com
 
-## How the stages are protected
+## How it works
 
-Only stage 1's location is in the page. Each stage's flag and the next stage are AES-GCM encrypted
-with a key derived (PBKDF2) from that stage's city name, so you can't read later stages from the source
-without solving the earlier ones.
+- Free, no keys: street photos come from [Panoramax](https://panoramax.fr) (open licences, credits shown after
+  each stage is solved), the map is [OpenFreeMap](https://openfreemap.org) with English-only labels, and the city
+  check uses OpenStreetMap's Nominatim.
+- Photos are downloaded, resized, stripped of all metadata (no GPS) and saved under random names in `img/`.
+  The bottom of each 360 photo is painted over (camera car, uploader logos).
+- No coordinates are in the page. Stage 1 is in the clear; each stage's flag, map spot and the whole next
+  stage are AES-GCM encrypted with a key unlocked by the right city name (PBKDF2), so later stages can't be
+  read from the source.
 
-To change stages: put them in `tools/stages.json` (kept out of git, same fields as before: lat, lng,
-heading, cc, city, hint, flag, level) and run `node tools/build.mjs`. It rewrites the data inside `index.html`.
+## Changing the stages
 
-## Google Maps key (walk limit + no street names)
+Both files below hold answers and stay out of git.
 
-Set `GMAPS_KEY` near the top of the script in `index.html` to a Google Maps JavaScript API key. With a key:
-street names are hidden in Street View, and the player can only walk within `walk` metres of the start
-(Easy 200 m, Medium 150 m, Hard 120 m). Without a key the page falls back to the keyless embed (free walking).
-Restrict the key in Google Cloud to `https://abdalaziz5.onrender.com/*` - it is visible in the page.
-
-## Notes
-
-- The map uses OpenFreeMap tiles (free, no key) with every label forced to English (or Latin letters), and street names, house numbers and points of interest hidden.
-- The current stage's Street View coordinates are visible in DevTools (the iframe needs them). That only spoils the stage you're on, not the later ones.
+1. `tools/stages.json`: per stage `level`, `cc` (country code), `cities` (accepted names as Nominatim returns
+   them), `hint`, `flag`, and `source` (`collection` id on Panoramax, `from`/`to` photo range, `kind`: `360` or `flat`).
+2. `python3 tools/fetch.py` downloads and cleans the photos into `img/` and writes `tools/photos.json`
+   (`--dry` just prints how far each stretch goes).
+3. `node tools/build.mjs` encrypts everything into `index.html`.
