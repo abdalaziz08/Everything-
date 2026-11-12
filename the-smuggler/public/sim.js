@@ -12,7 +12,7 @@
 // winning run offline, you have to actually play it out.
 
 export const W = 480, H = 640;
-export const LIVES = 5;
+export const LIVES = 6;
 export const BULLET_SPEED = 0.62;
 export const PHASES = [
   { name: "I · CONTRABAND", hp: 420, col: "#ff4d7a" },
